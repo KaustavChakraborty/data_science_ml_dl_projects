@@ -1,5 +1,5 @@
 # ============================================================
-# CODE 4: HANDLING CLASS IMBALANCE
+# CODE: HANDLING CLASS IMBALANCE
 # ============================================================
 # This script demonstrates multiple standard strategies for dealing
 # with imbalanced binary classification problems.
@@ -45,16 +45,8 @@ from sklearn.linear_model import LogisticRegression
 # more stable and coefficient scales become comparable.
 from sklearn.preprocessing import StandardScaler
 
-# train_test_split is used to separate data into training and testing subsets.
-# StratifiedKFold and cross_val_score are imported but not used in this script;
-# they are often useful for cross-validation in related workflows.
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 
-# These are evaluation metrics and utilities.
-# Important note:
-#   precision_score and recall_score are used later in the code,
-#   but they are NOT imported here in the original script.
-#   That has been left unchanged exactly as requested.
 from sklearn.metrics import (
     f1_score, roc_auc_score, average_precision_score,
     precision_recall_curve, confusion_matrix, classification_report,
