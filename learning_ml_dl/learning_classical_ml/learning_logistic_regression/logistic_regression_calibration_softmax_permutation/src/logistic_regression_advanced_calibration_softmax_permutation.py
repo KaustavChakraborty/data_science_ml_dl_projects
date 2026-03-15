@@ -1,5 +1,5 @@
 # ============================================================
-# CODE 7: ADVANCED TOPICS
+# CODE: ADVANCED TOPICS
 # ============================================================
 # This script demonstrates several interview-level and practical
 # extensions of logistic regression beyond the basic binary case.
