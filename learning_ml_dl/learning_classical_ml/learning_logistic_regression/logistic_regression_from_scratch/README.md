@@ -71,7 +71,7 @@ The model is trained by minimizing **binary cross-entropy loss**, optionally wit
 
 ## File
 
-- `logistic_regression_from_scratch_v3.py`
+- `logistic_regression_from_scratch.py`
 
 ---
 
