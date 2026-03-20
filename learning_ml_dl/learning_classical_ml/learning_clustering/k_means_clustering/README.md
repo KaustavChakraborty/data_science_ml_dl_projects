@@ -194,7 +194,7 @@ clustering/
 ├── plots/
 │   ├── datasets/
 │   │   ├── synthetic_overview.png
-│   │   └── softmatter_pca.png
+│   │   
 │   │
 │   └── kmeans/
 │       ├── init_comparison.png
