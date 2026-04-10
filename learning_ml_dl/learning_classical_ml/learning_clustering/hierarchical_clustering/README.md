@@ -1,1288 +1,1361 @@
-You're right — here is a **much more exhaustive, project-level `README.md`**, written as a serious, documentation-quality file you can place directly in the repository.
+# Agglomerative Hierarchical Clustering — Deep-Dive Tutorial Project
 
-````md
-# K-Means Clustering Tutorial Project
-## From Scratch to Advanced Diagnostics, Model Selection, Failure Modes, and Scalable Clustering
+This project is a **full learning notebook in script form** for understanding agglomerative hierarchical clustering from first principles, through standard SciPy usage, up to scientific interpretation on synthetic and soft-matter-inspired datasets.
+
+It is designed so that, at some distant future date, you can return to this repository, read only this README, and recover:
+
+- what hierarchical clustering is,
+- how the algorithm actually works,
+- what each linkage criterion means mathematically,
+- how the code in this project is structured,
+- how to read every generated figure,
+- how to choose the number of clusters `K`,
+- when each linkage succeeds or fails,
+- and what the polymer example is trying to teach physically.
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#project-overview)
-2. [Why This Project Exists](#why-this-project-exists)
-3. [Who This Project Is For](#who-this-project-is-for)
-4. [Learning Goals](#learning-goals)
-5. [Project Philosophy](#project-philosophy)
-6. [Repository Structure](#repository-structure)
-7. [Core Concepts Covered](#core-concepts-covered)
-8. [What Is Clustering?](#what-is-clustering)
-9. [What Is K-Means?](#what-is-k-means)
-10. [Mathematical Objective of K-Means](#mathematical-objective-of-k-means)
-11. [Key Assumptions of K-Means](#key-assumptions-of-k-means)
-12. [Why K-Means Can Succeed](#why-k-means-can-succeed)
-13. [Why K-Means Can Fail](#why-k-means-can-fail)
-14. [Project Workflow Summary](#project-workflow-summary)
-15. [Datasets Used in the Project](#datasets-used-in-the-project)
-16. [Dataset Generation Module](#dataset-generation-module)
-17. [Synthetic Datasets and What They Teach](#synthetic-datasets-and-what-they-teach)
-18. [Soft-Matter and Scientific Datasets](#soft-matter-and-scientific-datasets)
-19. [Real Benchmark Datasets](#real-benchmark-datasets)
-20. [Installation and Requirements](#installation-and-requirements)
-21. [How to Run the Project](#how-to-run-the-project)
-22. [Expected Outputs](#expected-outputs)
-23. [Detailed Walkthrough of the K-Means Module](#detailed-walkthrough-of-the-k-means-module)
-24. [Scratch Implementation: KMeansScratch](#scratch-implementation-kmeansscratch)
-25. [Initialization Methods](#initialization-methods)
-26. [Why Initialization Matters](#why-initialization-matters)
-27. [Comparing Scratch K-Means with sklearn](#comparing-scratch-k-means-with-sklearn)
-28. [How to Choose the Number of Clusters](#how-to-choose-the-number-of-clusters)
-29. [K-Selection Metrics Explained in Detail](#k-selection-metrics-explained-in-detail)
-30. [Silhouette Plots Explained in Detail](#silhouette-plots-explained-in-detail)
-31. [Failure Modes Explained in Detail](#failure-modes-explained-in-detail)
-32. [MiniBatchKMeans and Scalability](#minibatchkmeans-and-scalability)
-33. [Scientific Relevance of This Project](#scientific-relevance-of-this-project)
-34. [Interpretation of the Main Generated Figures](#interpretation-of-the-main-generated-figures)
-35. [How to Read the Console Output](#how-to-read-the-console-output)
-36. [Recommended Learning Sequence](#recommended-learning-sequence)
-37. [Practical Lessons from This Repository](#practical-lessons-from-this-repository)
-38. [Common Mistakes and Misconceptions](#common-mistakes-and-misconceptions)
-39. [Troubleshooting](#troubleshooting)
-40. [Possible Extensions](#possible-extensions)
-41. [Suggested Future Work](#suggested-future-work)
-42. [References and Further Reading](#references-and-further-reading)
-43. [Final Summary](#final-summary)
+1. [Project purpose](#project-purpose)
+2. [What this project teaches](#what-this-project-teaches)
+3. [High-level overview of hierarchical clustering](#high-level-overview-of-hierarchical-clustering)
+4. [Why this project is useful](#why-this-project-is-useful)
+5. [Repository structure](#repository-structure)
+6. [Environment and dependencies](#environment-and-dependencies)
+7. [How to run](#how-to-run)
+8. [What the script produces](#what-the-script-produces)
+9. [Core mathematical ideas](#core-mathematical-ideas)
+10. [Understanding the linkage methods](#understanding-the-linkage-methods)
+11. [How the scratch implementation works](#how-the-scratch-implementation-works)
+12. [How to read a linkage matrix](#how-to-read-a-linkage-matrix)
+13. [How to read a dendrogram](#how-to-read-a-dendrogram)
+14. [Metrics used in this project](#metrics-used-in-this-project)
+15. [Section-by-section walkthrough of the code](#section-by-section-walkthrough-of-the-code)
+16. [Detailed interpretation of each dataset](#detailed-interpretation-of-each-dataset)
+17. [How to choose `K`](#how-to-choose-k)
+18. [How to interpret the polymer hierarchy section](#how-to-interpret-the-polymer-hierarchy-section)
+19. [How to interpret the performance heatmap](#how-to-interpret-the-performance-heatmap)
+20. [Most important conceptual lessons](#most-important-conceptual-lessons)
+21. [Pitfalls, caveats, and known issues](#pitfalls-caveats-and-known-issues)
+22. [Suggested extensions](#suggested-extensions)
+23. [Revision guide: if you only have 10 minutes](#revision-guide-if-you-only-have-10-minutes)
+24. [Revision guide: if you have 1 hour](#revision-guide-if-you-have-1-hour)
+25. [Glossary](#glossary)
 
 ---
 
-# Project Overview
+## Project purpose
 
-This repository is a **deep educational project on K-means clustering**. It is built to teach the algorithm from the ground up, moving from intuition and manual implementation to practical diagnostics and real usage patterns.
+The goal of this project is **not just to run hierarchical clustering**, but to *learn it deeply*.
 
-The project does **not** treat K-means as just a single library call. Instead, it studies the full workflow:
+Many clustering tutorials stop at:
 
-- how clustering datasets are generated
-- how K-means works internally
-- how initialization affects convergence and quality
-- how to compare a scratch implementation against `scikit-learn`
-- how to choose the number of clusters \(K\)
-- how to inspect silhouette plots rather than only a single score
-- where K-means succeeds
-- where K-means fails
-- how to scale K-means to large datasets using mini-batches
-- how K-means can be interpreted in a scientific feature-space setting
+```python
+Z = linkage(X, method="ward")
+labels = fcluster(Z, t=3, criterion="maxclust")
+```
 
-This project is therefore both:
+and never really explain:
 
-- a **working clustering codebase**
-- a **teaching document in code form**
+- what `Z` contains,
+- what exactly is being merged at each step,
+- why different linkage methods produce different dendrograms,
+- why single linkage can be perfect for moons and terrible for unequal blobs,
+- why Ward excels on compact blob-like clusters,
+- why silhouette can be misleading on non-convex data,
+- and how hierarchical clustering can reveal *nested* structure rather than just flat labels.
 
----
-
-# Why This Project Exists
-
-Many machine learning introductions present K-means in an oversimplified way:
-
-- choose `K`
-- run `KMeans(...)`
-- plot the result
-- move on
-
-That is not enough for real understanding.
-
-In practice, meaningful use of K-means requires understanding:
-
-- the algorithm’s objective
-- what the centroids actually represent
-- what happens when initialization is poor
-- how to interpret inertia
-- why choosing \(K\) is hard
-- why a high silhouette score does not automatically mean the answer is correct
-- why K-means breaks on certain geometries
-- when MiniBatchKMeans is the better practical choice
-
-This repository was created to provide that deeper level of understanding.
+This project fills that gap.
 
 ---
 
-# Who This Project Is For
+## What this project teaches
 
-This project is especially useful for:
+By the end of this project, you should understand all of the following.
 
-- students learning clustering for the first time
-- machine learning beginners who want a rigorous foundation
-- scientific computing students transitioning into data science
-- researchers in physics, chemistry, materials science, or biophysics who want to understand unsupervised learning in feature space
-- anyone who wants to move beyond “I ran KMeans” toward “I understand what KMeans is doing and when to trust it”
+### Algorithmic understanding
 
-It is particularly relevant for people with backgrounds in:
+You will know how agglomerative clustering proceeds step by step:
 
-- statistical physics
-- soft matter
-- computational chemistry
-- biophysics
-- molecular simulation
-- quantitative data analysis
+1. start with `n` singleton clusters,
+2. compute pairwise distances,
+3. repeatedly merge the two closest clusters,
+4. update cluster-to-cluster distances after each merge,
+5. record the merge history in a linkage matrix,
+6. cut the final tree at a chosen height or chosen number of clusters.
 
-because the project explicitly includes soft-matter-inspired datasets and scientific-style feature interpretation.
+### Mathematical understanding
 
----
+You will understand the difference between:
 
-# Learning Goals
+- **single linkage**: nearest-neighbor cluster distance,
+- **complete linkage**: farthest-neighbor cluster distance,
+- **average linkage**: average cross-cluster distance,
+- **Ward linkage**: merge cost based on increase in within-cluster variance.
 
-After working through this project, the reader should be able to:
+### Geometric understanding
 
-- explain what clustering is in simple terms
-- explain the difference between clustering and classification
-- explain the K-means objective function
-- implement Lloyd’s algorithm manually
-- understand why the mean is the correct centroid for squared Euclidean distance
-- explain why K-means depends on initialization
-- explain why `k-means++` is usually better than plain random initialization
-- use `scikit-learn`’s `KMeans` properly
-- evaluate clustering using both internal and external metrics
-- interpret elbow plots, silhouette scores, CH scores, DB scores, and Gap statistic
-- understand the difference between “good average score” and “correct cluster structure”
-- interpret silhouette plots cluster-by-cluster
-- recognize when K-means is the wrong algorithm for the data geometry
-- understand the role of MiniBatchKMeans in scalable clustering
+You will see that the correct linkage depends on cluster geometry:
 
----
+- compact spherical blobs,
+- elongated anisotropic blobs,
+- unequal cluster sizes,
+- non-convex rings,
+- non-convex moons,
+- physically meaningful hierarchical states.
 
-# Project Philosophy
+### Practical understanding
 
-This repository is built around five principles:
+You will learn how to use:
 
-## 1. Teach the algorithm, not just the API
-You should understand how K-means works internally before relying on a library.
+- SciPy’s `linkage`, `dendrogram`, `fcluster`, `cophenet`,
+- `StandardScaler`,
+- PCA for visualization,
+- ARI and silhouette for evaluation,
+- dendrogram cut heights for selecting `K`.
 
-## 2. Emphasize interpretation, not just execution
-The project puts strong emphasis on reading plots, understanding metrics, and diagnosing behavior.
+### Scientific understanding
 
-## 3. Show both success and failure
-A good tutorial should not only show best-case scenarios.
-
-## 4. Connect toy examples to realistic feature spaces
-The project includes soft-matter-style datasets to bridge ML and scientific applications.
-
-## 5. Build intuition through controlled datasets
-Every synthetic dataset was chosen because it teaches something specific.
+You will also see that clustering is not only about “best labels.” Sometimes the real value lies in the **hierarchical map itself**, especially in scientific systems such as polymer conformational landscapes.
 
 ---
 
-# Repository Structure
+## High-level overview of hierarchical clustering
 
-A typical repository layout for this project looks like:
+Agglomerative hierarchical clustering is a **bottom-up clustering algorithm**.
+
+Instead of directly assigning each point to one of `K` clusters from the start, it builds a **tree of merges**.
+
+At the beginning:
+
+- every sample is its own cluster.
+
+Then repeatedly:
+
+- the two closest clusters are merged.
+
+This continues until:
+
+- all samples belong to one final cluster.
+
+The entire process creates a tree called a **dendrogram**.
+
+This is important because hierarchical clustering does **more than produce one partition**. It produces a whole nested family of partitions:
+
+- many small clusters at low cut heights,
+- fewer larger clusters at high cut heights,
+- one giant cluster at the very top.
+
+So hierarchical clustering answers not only:
+
+> “What are the clusters?”
+
+but also:
+
+> “How do clusters merge into larger structures?”
+
+That is why it is so useful when the data contain **multi-scale structure**.
+
+---
+
+## Why this project is useful
+
+This project is useful because it combines **three levels of learning** in one place.
+
+### Level 1 — from scratch intuition
+
+The custom `AgglomerativeScratch` class shows the algorithm in pure NumPy. This is where you learn what the algorithm is actually doing internally.
+
+### Level 2 — library-level workflow
+
+The SciPy-based sections show how hierarchical clustering is normally done in practice:
+
+- `linkage(...)`
+- `dendrogram(...)`
+- `fcluster(...)`
+
+### Level 3 — interpretation and scientific reasoning
+
+The comparison plots, dendrogram analysis, `K` selection plots, polymer example, and final heatmap teach how to *think* about clustering results rather than just run code.
+
+---
+
+## Repository structure
+
+A typical project layout for this tutorial is expected to look like this:
 
 ```text
-clustering/
-│
+.
 ├── 00_generate_datasets.py
-├── 01_kmeans.py
-├── kmeans_v2.py
+├── hierarchical_v1.py                # original clustering tutorial script
+├── hierarchical_v1_annotated.py      # heavily documented version
+├── hierarchical_v1_annotated_with_sklearn.py   # optional extended version
 ├── data/
 │   ├── blobs_easy.npz
 │   ├── blobs_aniso.npz
 │   ├── blobs_unequal.npz
 │   ├── circles.npz
 │   ├── moons.npz
-│   ├── colloidal_phases.npz
-│   ├── polymer_conf.npz
-│   ├── iris.npz
-│   ├── wine.npz
-│   └── digits.npz
-│
-├── plots/
-│   ├── datasets/
-│   │   ├── synthetic_overview.png
-│   │   └── softmatter_pca.png
-│   │
-│   └── kmeans/
-│       ├── init_comparison.png
-│       ├── choose_K_easy_blobs.png
-│       ├── silhouette_easy_blobs.png
-│       ├── failure_modes.png
-│       ├── colloidal_phases.png
-│       └── ...
-│
-├── observations.md
-└── README.md
-````
-
-### Main files
-
-#### `00_generate_datasets.py`
-
-Creates and saves all datasets used throughout the tutorial.
-
-#### `01_kmeans.py` / `kmeans_v2.py`
-
-Main K-means tutorial script containing:
-
-* scratch K-means
-* initialization comparison
-* sklearn demonstration
-* model-selection diagnostics
-* silhouette plots
-* failure-mode visualization
-* mini-batch benchmarking
-
-#### `data/`
-
-Stores all generated and loaded datasets in a common `.npz` format.
-
-#### `plots/`
-
-Stores all generated visual outputs.
-
-#### `observations.md`
-
-Detailed interpretation of results and conclusions.
-
----
-
-# Core Concepts Covered
-
-This project covers the following concepts in depth:
-
-* unsupervised learning
-* clustering
-* centroid-based methods
-* Euclidean distance
-* within-cluster sum of squares
-* local minima
-* random initialization
-* `k-means++`
-* feature scaling
-* silhouette score
-* Adjusted Rand Index
-* Adjusted Mutual Information
-* Calinski-Harabasz score
-* Davies-Bouldin score
-* Gap statistic
-* cluster geometry
-* non-convex clustering
-* mini-batch optimization
-
----
-
-# What Is Clustering?
-
-Clustering is an unsupervised learning task in which we try to organize data points into groups such that:
-
-* points in the same group are similar
-* points in different groups are dissimilar
-
-Unlike supervised learning, clustering does **not** rely on known labels during fitting.
-
-In a clustering problem, you usually have:
-
-* a feature matrix (X)
-* no labels for training
-* a need to discover structure
-
-In synthetic experiments, true labels may still exist for benchmarking, but those labels are not used by the clustering algorithm itself.
-
----
-
-# What Is K-Means?
-
-K-means is a clustering algorithm that divides a dataset into exactly (K) groups.
-
-It works by maintaining (K) centroids and repeating two main steps:
-
-1. **Assignment step**
-   Assign every point to the nearest centroid.
-
-2. **Update step**
-   Recompute each centroid as the mean of the points assigned to it.
-
-This process repeats until the centroids stop changing significantly or a maximum number of iterations is reached.
-
----
-
-# Mathematical Objective of K-Means
-
-K-means minimizes the within-cluster sum of squared distances:
-
-[
-J = \sum_{k=1}^{K}\sum_{x_i \in C_k} |x_i - \mu_k|^2
-]
-
-where:
-
-* (C_k) is cluster (k)
-* (\mu_k) is the centroid of cluster (k)
-
-This quantity is also called:
-
-* **inertia**
-* **WCSS**
-* **within-cluster sum of squares**
-* **K-means objective**
-
-Lower values mean points are closer to their assigned centroids.
-
----
-
-# Key Assumptions of K-Means
-
-K-means works best when the data has the following characteristics:
-
-* clusters are compact
-* clusters are roughly spherical
-* clusters have comparable spread
-* Euclidean distance is meaningful
-* cluster separation is well described by centroids
-
-These assumptions are not always stated explicitly, but they govern when K-means behaves well.
-
----
-
-# Why K-Means Can Succeed
-
-K-means performs extremely well when:
-
-* the dataset has clear, well-separated blob-like groups
-* the groups are approximately convex and compact
-* the correct number of clusters is chosen
-* features are properly scaled
-* initialization is sensible
-
-That is why `blobs_easy` in this project produces nearly ideal behavior.
-
----
-
-# Why K-Means Can Fail
-
-K-means struggles when:
-
-* clusters are non-convex
-* clusters are nested
-* clusters differ strongly in size
-* clusters differ strongly in density
-* the true shape is curved or manifold-like
-* the data is not naturally partitioned by centroid distance
-
-Examples included in this project:
-
-* concentric circles
-* two moons
-* unequal-size blobs
-* anisotropic blobs
-
----
-
-# Project Workflow Summary
-
-The complete workflow in this project is:
-
-1. generate or load datasets
-2. save them in a consistent format
-3. visualize the dataset structure
-4. implement K-means manually
-5. compare manual K-means with sklearn
-6. compare initialization strategies
-7. select (K) using multiple methods
-8. inspect full silhouette plots
-9. visualize K-means failure cases
-10. benchmark MiniBatchKMeans on large data
-
-This provides a full clustering learning pipeline rather than a single isolated experiment.
-
----
-
-# Datasets Used in the Project
-
-The project uses three categories of datasets:
-
-## 1. Synthetic geometric benchmark datasets
-
-Used to teach K-means behavior under controlled geometry.
-
-## 2. Scientific / soft-matter-inspired feature datasets
-
-Used to connect clustering ideas with physically meaningful features.
-
-## 3. Standard real datasets
-
-Used to connect toy examples to familiar machine learning benchmarks.
-
----
-
-# Dataset Generation Module
-
-The dataset generation script creates all datasets needed by the tutorial.
-
-It also saves them in a standard format:
-
-```python
-X = feature matrix
-y = ground-truth labels
+│   └── polymer_conf.npz
+└── plots/
+    └── hierarchical/
+        ├── linkage_cmp_isotropic_blobs.png
+        ├── linkage_cmp_two_moons.png
+        ├── dendrogram_isotropic_blobs.png
+        ├── chooseK_isotropic_blobs.png
+        ├── polymer_hierarchy.png
+        └── linkage_heatmap.png
 ```
 
-Each dataset is saved as:
+The data are expected to be stored in `.npz` files with keys:
 
-```text
-data/<dataset_name>.npz
-```
-
-This uniform format makes downstream experimentation cleaner.
-
-The dataset generation script also creates overview plots to help the user visually inspect the datasets before clustering.
+- `X`: feature matrix
+- `y`: true labels
 
 ---
 
-# Synthetic Datasets and What They Teach
+## Environment and dependencies
 
-## `blobs_easy`
+This project uses the following Python ecosystem.
 
-Three compact, well-separated Gaussian blobs.
+### Core dependencies
 
-### What it teaches
+- `numpy`
+- `scipy`
+- `matplotlib`
+- `seaborn`
+- `pandas`
+- `scikit-learn`
 
-* K-means in its ideal setting
-* perfect or near-perfect clustering recovery
-* clean model-selection behavior
-* very strong silhouette structure
+### Libraries and what they are used for
 
-### Why it is included
+#### NumPy
+Used for:
 
-This is the reference best-case dataset.
+- raw array manipulation,
+- manual distance bookkeeping,
+- centroid updates,
+- random subsampling.
 
----
+#### SciPy
+Used for:
 
-## `blobs_aniso`
+- pairwise distances via `pdist` and `squareform`,
+- linkage matrix creation via `linkage`,
+- dendrogram visualization via `dendrogram`,
+- flat cluster extraction via `fcluster`,
+- cophenetic correlation via `cophenet`.
 
-Three elongated / rotated Gaussian blobs.
+#### scikit-learn
+Used for:
 
-### What it teaches
+- `StandardScaler`,
+- `PCA`,
+- `adjusted_rand_score`,
+- `silhouette_score`.
 
-* K-means can struggle when clusters are anisotropic
-* but if the elongated groups are still well separated, K-means may still perform surprisingly well
+#### Matplotlib / seaborn / pandas
+Used for:
 
-### Why it is included
-
-It teaches that “K-means struggles on anisotropic clusters” is a tendency, not an absolute law.
-
----
-
-## `blobs_unequal`
-
-Three blobs with different sizes and variances.
-
-### What it teaches
-
-* K-means prefers balanced centroid-based partitions
-* large diffuse clusters may be split
-* smaller tight clusters may distort the decision regions
-
-### Why it is included
-
-It reveals sensitivity to size imbalance.
-
----
-
-## `circles`
-
-Two concentric circles.
-
-### What it teaches
-
-* K-means cannot represent one ring surrounding another
-* centroid-based partitioning is fundamentally wrong for nested ring structure
-
-### Why it is included
-
-It is one of the classic failure modes of K-means.
+- all plots,
+- subplot grids,
+- the final performance heatmap table.
 
 ---
 
-## `moons`
+## How to run
 
-Two interleaved crescent-shaped clusters.
+### Step 1 — generate the datasets
 
-### What it teaches
-
-* K-means struggles with non-convex manifolds
-* centroid-based Voronoi splitting is a poor match for curved clusters
-
-### Why it is included
-
-It demonstrates failure on nonlinearly separable geometry.
-
----
-
-# Soft-Matter and Scientific Datasets
-
-## `colloidal_phases`
-
-A synthetic soft-matter dataset with physically inspired features such as:
-
-* bond-orientational order
-* local density
-* nematic order parameter
-
-### What it teaches
-
-* K-means can be used on feature-engineered scientific descriptors
-* centroids can be interpreted physically
-* cluster selection can still be studied through metrics and visualizations
-
-### Why it is included
-
-It connects ML clustering with phase identification workflows in soft matter and statistical physics.
-
----
-
-## `polymer_conf`
-
-A synthetic polymer conformation dataset with features inspired by structural descriptors such as:
-
-* dihedral structure
-* radius of gyration
-* end-to-end distance
-
-### What it teaches
-
-* clustering can identify different structural states in molecular systems
-* feature space matters more than raw geometry in many scientific applications
-
----
-
-# Real Benchmark Datasets
-
-## `iris`
-
-A classic 3-class flower measurement dataset.
-
-## `wine`
-
-A 3-class chemical-feature dataset.
-
-## `digits`
-
-A handwritten digit dataset represented in 64-dimensional feature space.
-
-### Why they are included
-
-These datasets bridge toy clustering examples and real-world machine learning practice.
-
----
-
-# Installation and Requirements
-
-## Python version
-
-Recommended:
-
-* Python 3.8 or newer
-
-## Required packages
-
-Install with:
+Run the dataset-generation script first.
 
 ```bash
-pip install numpy scipy scikit-learn matplotlib seaborn
+python 00_generate_datasets.py
 ```
 
-## Main libraries used
+This creates the `.npz` files inside `data/`.
 
-* `numpy`
-* `scipy`
-* `matplotlib`
-* `scikit-learn`
-* `seaborn`
-
----
-
-# How to Run the Project
-
-## Step 1 — Generate datasets
+### Step 2 — run the main tutorial
 
 ```bash
-python3 00_generate_datasets.py
+python hierarchical_v1.py
 ```
 
-This will:
-
-* create the datasets in `data/`
-* generate dataset overview figures in `plots/datasets/`
-
-## Step 2 — Run the K-means tutorial script
+or if you are using your expanded version:
 
 ```bash
-python3 kmeans_v2.py
+python hierarchical_v1_annotated.py
 ```
 
-or, depending on your main file:
+or:
 
 ```bash
-python3 01_kmeans.py
+python hierarchical_v1_annotated_with_sklearn.py
 ```
 
-## Step 3 — Inspect generated plots
-
-Main K-means outputs appear in:
-
-```text
-plots/kmeans/
-```
-
-## Step 4 — Read `observations.md`
-
-This file contains detailed experiment interpretation and conclusions.
-
----
-
-# Expected Outputs
-
-When the main script is run successfully, you should see console messages related to:
-
-* scratch vs sklearn comparison
-* initialization comparison
-* sklearn KMeans demo
-* K-selection results
-* silhouette plot generation
-* failure-mode plot generation
-* mini-batch speed comparison
-
-You should also see output figures such as:
-
-* `init_comparison.png`
-* `choose_K_easy_blobs.png`
-* `silhouette_easy_blobs.png`
-* `failure_modes.png`
-* `colloidal_phases.png`
-
----
-
-# Detailed Walkthrough of the K-Means Module
-
-The main tutorial script contains several logically distinct sections.
-
----
-
-# Scratch Implementation: KMeansScratch
-
-The `KMeansScratch` class implements K-means manually using NumPy.
-
-It includes:
-
-* `__init__`
-* `_init_random`
-* `_init_kmeanspp`
-* `_lloyd`
-* `fit`
-* `predict`
-
-This is the educational core of the project.
-
-## Why this matters
-
-Implementing K-means manually forces understanding of:
-
-* how centroids are initialized
-* how the assignment step works
-* why the mean is used in the update step
-* what inertia means
-* how convergence is checked
-* why multiple restarts matter
-
----
-
-# Initialization Methods
-
-The project implements and compares two initialization methods:
-
-## Random initialization
-
-Choose (K) random data points as initial centroids.
-
-### Pros
-
-* simple
-* easy to code
-
-### Cons
-
-* unstable
-* can place multiple centroids in the same true cluster
-* can produce poor local minima
-
----
-
-## K-means++ initialization
-
-Choose the first centroid randomly, then choose future centroids with probability proportional to squared distance from the nearest existing centroid.
-
-### Pros
-
-* spreads initial centroids across the data
-* usually lowers final inertia
-* usually speeds up convergence
-* usually improves run-to-run stability
-
-### Why it matters
-
-This is the initialization method used by default in most practical K-means workflows.
-
----
-
-# Why Initialization Matters
-
-K-means solves a non-convex optimization problem.
-
-That means:
-
-* the final answer depends on the starting point
-* different initial centroids can produce different final partitions
-* some runs may converge to poor local minima
-
-This repository explicitly studies that effect rather than hiding it.
-
-The `compare_init()` experiment demonstrates that:
-
-* random initialization can have high variance in final inertia
-* k-means++ is much more stable
-* better initialization also improves convergence speed
-
----
-
-# Comparing Scratch K-Means with sklearn
-
-One of the most important sanity checks in the project is comparing:
-
-* the manual NumPy implementation
-* `sklearn.cluster.KMeans`
-
-This comparison answers:
-
-* Is the scratch implementation correct?
-* Is it minimizing the same objective?
-* Does it recover the same clustering on easy data?
-
-Matching inertia and matching ARI are strong evidence that the scratch implementation is behaving correctly.
-
----
-
-# How to Choose the Number of Clusters
-
-Choosing (K) is one of the hardest practical parts of K-means.
-
-This project includes a dedicated `choose_K()` function that evaluates multiple methods simultaneously.
-
-This is important because **no single method is universally perfect**.
-
----
-
-# K-Selection Metrics Explained in Detail
-
-## 1. Elbow method
-
-Tracks inertia as a function of (K).
-
-### Idea
-
-Look for the point where increasing (K) stops giving major reductions in WCSS.
-
-### Limitation
-
-The elbow is sometimes subjective.
-
----
-
-## 2. Silhouette score
-
-Measures how well each point fits inside its assigned cluster relative to the nearest competing cluster.
-
-### Interpretation
-
-* higher is better
-* near 1 means strong separation
-* near 0 means near a boundary
-* negative means likely misassignment
-
----
-
-## 3. Calinski-Harabasz score
-
-Measures a ratio of between-cluster dispersion to within-cluster dispersion.
-
-### Interpretation
-
-* higher is better
-
----
-
-## 4. Davies-Bouldin score
-
-Measures cluster overlap / similarity.
-
-### Interpretation
-
-* lower is better
-
----
-
-## 5. Gap statistic
-
-Compares clustering of the real dataset to clustering of random reference datasets sampled within the same bounding box.
-
-### Idea
-
-A good clustering should be substantially better than what would happen on random data.
-
-### Importance
-
-It introduces a baseline against randomness, which most other metrics do not.
-
----
-
-# Silhouette Plots Explained in Detail
-
-The project does not stop at mean silhouette score. It also generates full silhouette plots.
-
-This is extremely important.
-
-A mean silhouette score can hide:
-
-* one weak cluster
-* a cluster with many near-boundary points
-* over-clustering
-* under-clustering
-* cluster imbalance
-
-A full silhouette plot reveals:
-
-* silhouette distribution inside each cluster
-* cluster size imbalance
-* negative-assignment tails
-* cluster-by-cluster quality
-
-This is why the repository includes both:
-
-* silhouette score curves
-* full silhouette band plots
-
----
-
-# Failure Modes Explained in Detail
-
-The repository deliberately includes failure cases because a serious clustering tutorial must show not only success, but also the limits of the method.
-
-## Concentric circles
-
-K-means fails because centroids cannot represent inner-vs-outer ring structure.
-
-## Two moons
-
-K-means fails because non-convex curved manifolds are not well represented by Euclidean centroid partitions.
-
-## Unequal-size blobs
-
-K-means struggles because large diffuse clusters distort Voronoi partitions.
-
-## Anisotropic blobs
-
-K-means may degrade when clusters are elongated, although if separation is strong enough, it can still perform surprisingly well.
-
----
-
-# MiniBatchKMeans and Scalability
-
-Standard K-means uses the full dataset in each update cycle.
-
-That is fine for modest data sizes, but can become expensive for large datasets.
-
-MiniBatchKMeans addresses this by updating centroids using random mini-batches.
-
-## Advantages
-
-* much faster
-* scalable
-* often very similar final clustering
-* very useful for large (n)
-
-## Trade-off
-
-* final inertia may be slightly worse
-* it is approximate rather than full-batch exact
-
-The repository includes a benchmark comparing:
-
-* full KMeans
-* MiniBatchKMeans
-
-in terms of:
-
-* runtime
-* inertia
-* label agreement
-
----
-
-# Scientific Relevance of This Project
-
-This project is especially valuable for scientific users because it moves beyond standard textbook blobs.
-
-The soft-matter datasets demonstrate how clustering can be used in domains where each sample is represented by physically meaningful features.
-
-Possible scientific interpretations include:
-
-* identifying phases in simulation data
-* grouping local structural environments
-* clustering conformations of molecules or polymers
-* separating metastable states in descriptor space
-* organizing simulation outputs for further analysis
-
-In many scientific settings, the raw coordinates are less informative than carefully chosen feature descriptors. This project reflects that reality.
-
----
-
-# Interpretation of the Main Generated Figures
-
-## `init_comparison.png`
-
-Shows how initialization affects:
-
-* final inertia
-* convergence speed
-
-### What to look for
-
-* lower inertia is better
-* narrower spread means more stable runs
-* fewer iterations means faster convergence
-
----
-
-## `choose_K_easy_blobs.png`
-
-Shows all major K-selection diagnostics together.
-
-### Why it is important
-
-It provides multi-angle evidence for the correct number of clusters.
-
-### Panels included
-
-* Elbow
-* Silhouette
-* Calinski-Harabasz
-* Davies-Bouldin
-* Gap statistic
-* Method consensus
-
-### What to learn
-
-When several methods agree strongly, confidence in the chosen (K) increases.
-
----
-
-## `silhouette_easy_blobs.png`
-
-Shows full silhouette bands for multiple candidate values of (K).
-
-### Why it is important
-
-It reveals not just the mean quality of the clustering, but the internal structure of that quality.
-
-### What to learn
-
-Two different wrong values of (K) can have similar average silhouette but for different reasons:
-
-* under-clustering by merging true groups
-* over-clustering by splitting true groups
-
----
-
-## `failure_modes.png`
-
-Shows the true labels vs K-means predictions on geometries where K-means is weak.
-
-### What to learn
-
-K-means fails for geometric reasons, not randomly.
-
----
-
-# How to Read the Console Output
-
-Typical console output includes:
-
-* scratch inertia and ARI
-* sklearn inertia and ARI
-* mean inertia for random vs k-means++
-* sklearn inertia, iterations, ARI, AMI, silhouette
-* recommended K from each model-selection method
-* mini-batch speed-up and inertia loss
-
-These numbers are not isolated diagnostics; they support one another.
-
-For example:
-
-* strong silhouette + perfect ARI + unanimous K selection is a powerful combination
-* poor ARI in a failure mode confirms that a visually plausible partition may still be wrong
-
----
-
-# Recommended Learning Sequence
-
-A good way to study this repository is:
-
-## Pass 1 — high level
-
-* run the project
-* inspect the plots
-* read `observations.md`
-
-## Pass 2 — code understanding
-
-* read `00_generate_datasets.py`
-* read `KMeansScratch`
-* read `_init_kmeanspp`
-* read `_lloyd`
-* read `fit`
-
-## Pass 3 — diagnostics
-
-* study `compare_init`
-* study `choose_K`
-* study `silhouette_plot`
-
-## Pass 4 — interpretation
-
-* connect each plot to the assumptions of K-means
-* compare success cases and failure cases
-
----
-
-# Practical Lessons from This Repository
-
-## 1. K-means is strong but assumption-dependent
-
-It is not a universal clustering method.
-
-## 2. Initialization matters
-
-Bad seeds can produce poor local minima.
-
-## 3. Scaling matters
-
-Euclidean clustering is sensitive to feature magnitude.
-
-## 4. Choosing K needs evidence
-
-A single heuristic is rarely enough.
-
-## 5. Silhouette mean is not the full story
-
-Always inspect the full silhouette structure when possible.
-
-## 6. Failure is interpretable
-
-When K-means fails, the reason is usually geometric.
-
-## 7. Approximate methods are valuable
-
-MiniBatchKMeans can be a very practical compromise.
-
----
-
-# Common Mistakes and Misconceptions
-
-## Mistake 1 — Using unscaled data
-
-K-means can become dominated by one feature.
-
-## Mistake 2 — Treating inertia as an absolute quality score
-
-Inertia is only meaningful when comparing models on the same dataset and scale.
-
-## Mistake 3 — Choosing K by guess alone
-
-Use multiple diagnostics.
-
-## Mistake 4 — Trusting one random run
-
-Use multiple restarts.
-
-## Mistake 5 — Using K-means on circles and moons
-
-Those geometries violate centroid assumptions.
-
-## Mistake 6 — Treating a decent silhouette score as proof of correctness
-
-Wrong K can still yield moderately good scores.
-
----
-
-# Troubleshooting
-
-## Problem: dataset files not found
-
-### Cause
-
-`00_generate_datasets.py` has not been run yet.
-
-### Fix
-
-Run:
-
-```bash
-python3 00_generate_datasets.py
-```
-
----
-
-## Problem: plots are not appearing on screen
-
-### Cause
-
-The scripts use a non-interactive matplotlib backend and save figures directly.
-
-### Fix
+### Step 3 — inspect the output plots
 
 Look inside:
 
 ```text
-plots/datasets/
-plots/kmeans/
+plots/hierarchical/
 ```
 
----
-
-## Problem: clustering results differ between runs
-
-### Cause
-
-Random initialization or changed seeds.
-
-### Fix
-
-Set `random_state` explicitly and keep it fixed.
+Each image corresponds to one conceptual lesson in hierarchical clustering.
 
 ---
 
-## Problem: K-means seems poor on a dataset
+## What the script produces
 
-### Possible causes
+The project is organized into conceptual sections.
 
-* wrong K
-* poor initialization
-* no scaling
-* unsuitable geometry for K-means
+### A — Agglomerative clustering from scratch
 
-### Fix
+A tiny 10-point dataset is clustered using a manual NumPy implementation so that you can see the merge process conceptually.
 
-Inspect:
+### B — Linkage comparison
 
-* `compare_init`
-* `choose_K`
-* `silhouette_plot`
-* `failure_modes`
+The script compares the four linkage methods on different datasets using:
 
----
+- a dendrogram for each method,
+- a scatter plot of the flat clustering after cutting at chosen `K`.
 
-# Possible Extensions
+### C — Dendrogram analysis
 
-This repository can be extended in several directions.
+This section focuses on:
 
-## Additional clustering algorithms
+- merge heights,
+- cut lines,
+- cophenetic correlation,
+- jump structure,
+- and how to read the dendrogram beyond just extracting labels.
 
-* Agglomerative clustering
-* DBSCAN
-* Spectral clustering
-* Gaussian Mixture Models
-* HDBSCAN
+### D — Choosing `K`
 
-## More diagnostics
+This section compares:
 
-* PCA cluster overlays
-* UMAP projections
-* t-SNE visualizations
-* cluster stability under resampling
+- silhouette versus `K`,
+- ARI versus `K`.
 
-## More datasets
+### E — Polymer conformational hierarchy
 
-* biological data
-* materials descriptors
-* molecular simulation trajectories
-* time-series embeddings
-* image feature vectors
+This is the physically interesting part:
 
-## More scientific use cases
+- hierarchical clustering on polymer conformational features,
+- comparison between coarse and fine cuts,
+- interpretation in terms of conformational basins.
 
-* phase separation states
-* protein conformational basins
-* polymer folding states
-* metastable simulation-state discovery
+### F — Performance heatmap
+
+A compact summary of how each linkage behaves on different geometries.
 
 ---
 
-# Suggested Future Work
+## Core mathematical ideas
 
-Natural next steps after this project include:
+### 1. Pairwise distance matrix
 
-* adding hierarchical clustering and comparing dendrogram-based reasoning with K-means
-* adding DBSCAN to contrast centroid-based and density-based clustering
-* applying the same evaluation framework to Gaussian mixture models
-* running the K-selection pipeline on the soft-matter datasets
-* building a unified clustering comparison notebook
-* writing a companion `requirements.txt`
-* adding benchmark automation for all datasets
+For a dataset with samples
 
----
+\[
+X = \{x_1, x_2, \dots, x_n\},
+\]
 
-# References and Further Reading
+the Euclidean pairwise distances are
 
-## Foundational papers
+\[
+d_{ij} = \lVert x_i - x_j \rVert.
+\]
 
-* J. MacQueen (1967), *Some methods for classification and analysis of multivariate observations*
-* S. Lloyd (1982), *Least squares quantization in PCM*
-* D. Arthur and S. Vassilvitskii (2007), *k-means++: The advantages of careful seeding*
-* R. Tibshirani, G. Walther, T. Hastie (2001), *Estimating the number of clusters in a data set via the Gap statistic*
+At the start of agglomerative clustering, every point is its own cluster, so cluster distances are initially just point-to-point distances.
 
-## Useful topics to study next
+### 2. Repeated merging
 
-* hierarchical clustering
-* density-based clustering
-* spectral clustering
-* Gaussian mixture models
-* model-based clustering
-* cluster validation theory
+At each step, the algorithm chooses the two clusters `A` and `B` with the smallest cluster-to-cluster distance under the selected linkage rule.
 
----
+Then it creates a new merged cluster:
 
-# Final Summary
+\[
+C = A \cup B.
+\]
 
-This repository is a **full educational pipeline for K-means clustering**.
+### 3. Linkage matrix
 
-It teaches:
+Every merge is recorded in a row of the linkage matrix:
 
-* what clustering is
-* how K-means works mathematically
-* how to implement it from scratch
-* how initialization affects results
-* how to use sklearn properly
-* how to choose (K)
-* how to read silhouette structure
-* where K-means succeeds
-* where K-means fails
-* how to scale clustering to larger datasets
-
-The central goal of this project is to help the reader move from:
-
-> “I can run KMeans.”
-
-to
-
-> “I understand what KMeans is optimizing, when it should work, when it should fail, how to diagnose its behavior, and how to interpret the results rigorously.”
-
-That is the true purpose of this repository.
-
+```text
+[id_left, id_right, merge_height, cluster_size]
 ```
 
-This version is README-level detailed. If you want the next step to be even stronger, I can write a **GitHub-polished README.md** with badges, a quick-start section at the top, project highlights, sample output blocks, and inline figure captions formatted specifically for public repository presentation.
+If there are `n` samples, then the linkage matrix has shape:
+
+\[
+(n-1) \times 4.
+\]
+
+### 4. Dendrogram
+
+The linkage matrix is simply a compact numerical encoding of the dendrogram.
+
+The dendrogram is the visual tree of all merges.
+
+---
+
+## Understanding the linkage methods
+
+This is the heart of hierarchical clustering.
+
+### Single linkage
+
+For two clusters `A` and `B`:
+
+\[
+d_{\text{single}}(A,B) = \min_{a \in A,\, b \in B} d(a,b)
+\]
+
+Interpretation:
+
+- distance between clusters is the distance between their **closest pair of points**.
+
+Behavior:
+
+- tends to connect clusters through local bridges,
+- excellent for connected curved shapes,
+- vulnerable to **chaining**,
+- can fail badly when there are noisy bridges or unequal densities.
+
+Good for:
+
+- circles,
+- moons,
+- filamentary structures.
+
+### Complete linkage
+
+\[
+d_{\text{complete}}(A,B) = \max_{a \in A,\, b \in B} d(a,b)
+\]
+
+Interpretation:
+
+- distance between clusters is the distance between their **farthest pair of points**.
+
+Behavior:
+
+- prefers compact clusters,
+- resists chaining,
+- can be too conservative,
+- may split extended or curved structures.
+
+Good for:
+
+- compact, well-separated clusters,
+- elongated but still separated clusters.
+
+### Average linkage
+
+\[
+d_{\text{average}}(A,B) = \frac{1}{|A||B|} \sum_{a\in A}\sum_{b\in B} d(a,b)
+\]
+
+Interpretation:
+
+- distance between clusters is the **average** distance over all cross-cluster pairs.
+
+Behavior:
+
+- compromise between single and complete,
+- often robust,
+- less extreme than either chaining or worst-case compactness.
+
+Good for:
+
+- many general-purpose datasets,
+- moderately irregular shapes,
+- datasets where complete is too strict and single is too permissive.
+
+### Ward linkage
+
+Ward does not primarily think in terms of nearest or farthest cross-cluster points.
+
+Instead, it merges the pair of clusters that causes the **smallest increase in within-cluster sum of squares**.
+
+A standard form of the merge cost is:
+
+\[
+\Delta J(A,B) = \frac{|A||B|}{|A|+|B|} \lVert \mu_A - \mu_B \rVert^2
+\]
+
+where:
+
+- `|A|`, `|B|` are cluster sizes,
+- `\mu_A`, `\mu_B` are cluster centroids.
+
+Interpretation:
+
+- Ward tries to keep clusters compact and variance-minimizing.
+
+Behavior:
+
+- excellent for blob-like clusters,
+- usually strong on spherical or near-spherical groups,
+- poor on strongly non-convex manifolds like circles.
+
+Good for:
+
+- isotropic blobs,
+- many compact Gaussian-like datasets,
+- practical settings where compactness is the desired bias.
+
+---
+
+## How the scratch implementation works
+
+The custom `AgglomerativeScratch` class is where the algorithm becomes truly understandable.
+
+### Initialization
+
+The class starts with one cluster per sample.
+
+Internally it tracks:
+
+- cluster sizes,
+- cluster centroids,
+- active cluster IDs,
+- labels for linkage-matrix compatibility,
+- and the current cluster-distance representation.
+
+### Pairwise distances
+
+For non-Ward methods, it builds the full pairwise distance matrix using:
+
+- `pdist(X)`
+- `squareform(...)`
+
+The diagonal is set to infinity so a cluster is never merged with itself.
+
+### Merge search
+
+At each iteration it loops over all active cluster pairs and finds the pair with the smallest cluster distance.
+
+This is simple and transparent, though not optimized for very large `n`.
+
+### Distance update
+
+For single, complete, and average linkage, the code uses the **Lance–Williams recurrence**.
+
+This is a standard recursive formula for updating distances after a merge without recomputing all pointwise distances from scratch.
+
+### Why Lance–Williams matters
+
+Suppose clusters `A` and `B` merge into `C = A ∪ B`.
+
+Then you need the distance from `C` to every other active cluster `I`.
+
+Lance–Williams gives a generic update rule in terms of:
+
+- `d(A,I)`
+- `d(B,I)`
+- `d(A,B)`
+- cluster sizes.
+
+This is elegant because it shows that many linkage rules are just different parameter choices of one common recurrence family.
+
+### Ward in the scratch class
+
+Ward is handled separately through centroid and size logic rather than the same `_lw_update(...)` routine.
+
+That is conceptually helpful because Ward is not just another “nearest/farthest/average” distance rule. It is a variance-based merge criterion.
+
+### Output
+
+At the end of `fit(...)`, the object stores:
+
+- `self.Z_` — the linkage matrix.
+
+Then `get_labels(K)` cuts that dendrogram into `K` flat clusters using `fcluster(...)`.
+
+---
+
+## How to read a linkage matrix
+
+Every row in the linkage matrix corresponds to one merge.
+
+For `n` original points:
+
+- original samples have IDs `0, 1, ..., n-1`,
+- the first merged cluster gets ID `n`,
+- the next merged cluster gets ID `n+1`,
+- and so on.
+
+Each row is:
+
+```text
+[left_id, right_id, merge_height, new_cluster_size]
 ```
 
+### Example idea
+
+If a row is:
+
+```text
+[2, 8, 0.31, 2]
+```
+
+it means:
+
+- point 2 and point 8 were merged,
+- the merge happened at height 0.31,
+- the new cluster has size 2.
+
+If a later row is:
+
+```text
+[10, 9, 0.44, 3]
+```
+
+it means:
+
+- the already-created cluster with ID 10 merged with point 9,
+- at height 0.44,
+- producing a cluster of size 3.
+
+This is how the entire tree is encoded numerically.
+
+---
+
+## How to read a dendrogram
+
+A dendrogram is one of the most information-rich plots in clustering.
+
+### Leaves
+
+The leaves at the bottom correspond to samples or truncated subclusters.
+
+### Vertical axis
+
+The y-axis is the merge height.
+
+This is the dissimilarity level at which two branches join.
+
+### Horizontal ordering
+
+The left-right order is usually **not meaningful**. It may change without altering the clustering.
+
+What matters is:
+
+- who merges with whom,
+- and at what height.
+
+### Cutting the dendrogram
+
+If you draw a horizontal line across the dendrogram:
+
+- every connected component below that line is a cluster.
+
+This is how a flat clustering is extracted from the hierarchy.
+
+### Large vertical gaps
+
+If there is a large gap between merge heights, it often indicates a natural scale separation.
+
+Interpretation:
+
+- many low merges = within-cluster consolidation,
+- a large later merge = forcing distinct groups together.
+
+This is why big jumps are often used as a cue for choosing `K`.
+
+---
+
+## Metrics used in this project
+
+### Adjusted Rand Index (ARI)
+
+ARI measures similarity between predicted cluster labels and true labels.
+
+- `1.0` = perfect agreement,
+- around `0` = random-level agreement,
+- negative = worse than random after adjustment.
+
+Important:
+
+ARI is only available when true labels are known.
+
+### Silhouette score
+
+Silhouette measures how well each sample lies inside its assigned cluster compared with neighboring clusters.
+
+Rough interpretation:
+
+- high silhouette: compact and well-separated clusters,
+- low silhouette: overlapping or poorly separated clusters.
+
+Important caveat:
+
+Silhouette favors **compact Euclidean clusters**. It can be misleading for non-convex shapes such as moons and circles.
+
+### Cophenetic correlation
+
+Cophenetic correlation compares:
+
+- original pairwise distances,
+- versus dendrogram cophenetic distances.
+
+It measures how faithfully the tree preserves the pairwise geometry of the data.
+
+High cophenetic correlation means:
+
+- the dendrogram is a good summary of the data geometry.
+
+Important:
+
+It is **not** the same as label accuracy.
+
+You can have:
+
+- high cophenetic correlation but imperfect labels,
+- or low silhouette but correct manifold clustering.
+
+---
+
+## Section-by-section walkthrough of the code
+
+### Section A — Scratch agglomerative clustering
+
+Purpose:
+
+- teach the algorithm from the inside.
+
+What happens:
+
+- a tiny 10-point toy dataset is clustered,
+- each linkage is run,
+- the final `K=2` clustering is evaluated with ARI.
+
+Why this matters:
+
+- it demonstrates that very different merge criteria can still produce the same top-level partition on an easy dataset,
+- while hiding differences in internal hierarchy.
+
+### Section B — Linkage comparison
+
+Purpose:
+
+- compare single, complete, average, and Ward side-by-side.
+
+What happens:
+
+- the data are standardized,
+- each linkage is computed using SciPy,
+- truncated dendrograms are drawn,
+- flat clusters are extracted at fixed `K`,
+- ARI and silhouette are reported.
+
+Why this matters:
+
+- you see both the tree and the final clustering,
+- you learn that the same dataset can look very different depending on linkage,
+- and you learn that “best linkage” depends on data geometry.
+
+### Section C — Dendrogram analysis
+
+Purpose:
+
+- move beyond “get labels” into “understand the tree.”
+
+What happens:
+
+- Ward dendrogram is computed,
+- cophenetic correlation is measured,
+- merge-distance jumps are visualized,
+- a cophenetic scatter plot is drawn.
+
+Why this matters:
+
+- this section teaches how to use the hierarchy itself as an analytical object.
+
+### Section D — Choosing `K`
+
+Purpose:
+
+- compare flat-clustering quality across different cut levels.
+
+What happens:
+
+- the Ward dendrogram is cut at `K = 2, 3, ..., K_max`,
+- silhouette and ARI are plotted versus `K`.
+
+Why this matters:
+
+- it shows when geometry-based and truth-based criteria agree,
+- and when they may disagree.
+
+### Section E — Polymer conformational hierarchy
+
+Purpose:
+
+- show that hierarchical clustering is useful for scientific systems with nested states.
+
+What happens:
+
+- a polymer conformational dataset is loaded,
+- a Ward dendrogram is computed,
+- coarse `K=2` and finer `K=4` cuts are compared,
+- true states and clustering results are visualized in PCA space,
+- silhouette versus `K` is also shown.
+
+Why this matters:
+
+- real scientific data often have overlapping or nested states,
+- hierarchy can be more meaningful than one flat partition.
+
+### Section F — Performance heatmap
+
+Purpose:
+
+- compress the whole tutorial into one comparative summary.
+
+What happens:
+
+- each dataset is clustered with each linkage,
+- ARI values are assembled into a matrix,
+- the matrix is shown as a heatmap.
+
+Why this matters:
+
+- it reveals the geometry-to-linkage relationship at a glance.
+
+---
+
+## Detailed interpretation of each dataset
+
+### 1. Isotropic blobs
+
+These are compact, roughly spherical, well-separated clusters.
+
+Expected behavior:
+
+- all methods should work well,
+- Ward should be especially natural.
+
+What this dataset teaches:
+
+- the easy textbook case,
+- compact clusters align with silhouette,
+- compact clusters align with Ward’s bias.
+
+### 2. Anisotropic blobs
+
+These clusters are elongated or stretched in some directions.
+
+Expected behavior:
+
+- complete, average, and Ward often work well,
+- single linkage may suffer from chaining along elongated directions.
+
+What this dataset teaches:
+
+- not all non-spherical data are non-clusterable,
+- but chaining becomes more dangerous.
+
+### 3. Unequal blobs
+
+These clusters differ in size, density, or both.
+
+Expected behavior:
+
+- single linkage can fail dramatically,
+- average and Ward are often more robust.
+
+What this dataset teaches:
+
+- cluster imbalance is a serious challenge,
+- geometric closeness alone is not enough.
+
+### 4. Circles
+
+These are non-convex ring structures.
+
+Expected behavior:
+
+- single linkage can be excellent,
+- compactness-based methods fail badly.
+
+What this dataset teaches:
+
+- connectedness and compactness are different notions of clustering.
+
+### 5. Moons
+
+These are curved crescent-shaped manifolds.
+
+Expected behavior:
+
+- single linkage often succeeds,
+- complete, average, and Ward may split each moon incorrectly.
+
+What this dataset teaches:
+
+- silhouette can prefer the wrong answer if the wrong answer is more compact.
+
+### 6. Polymer conformations
+
+These are scientifically motivated states defined by features such as:
+
+- dihedral angles,
+- radius of gyration,
+- end-to-end distance.
+
+Expected behavior:
+
+- hierarchy may be real even if label recovery is imperfect,
+- multiple scales of structure may coexist,
+- a physically meaningful number of states may differ from the silhouette-optimal number.
+
+What this dataset teaches:
+
+- clustering in science is often about structure discovery, not perfect classification.
+
+---
+
+## How to choose `K`
+
+Choosing `K` is one of the hardest parts of clustering.
+
+This project teaches that there is no single universal answer.
+
+### Method 1 — Dendrogram cuts
+
+Look for large vertical gaps in the dendrogram.
+
+Interpretation:
+
+- low merges = within-cluster consolidation,
+- large later jumps = between-cluster fusion.
+
+A horizontal line in a large gap often gives a natural `K`.
+
+### Method 2 — Silhouette vs `K`
+
+Choose the `K` that maximizes silhouette.
+
+Good when:
+
+- clusters are compact and well-separated.
+
+Be careful when:
+
+- clusters are curved or non-convex,
+- clusters contain physically meaningful substructure.
+
+### Method 3 — ARI vs `K`
+
+Use this only when true labels are available.
+
+Useful for:
+
+- benchmarking,
+- synthetic datasets,
+- validation studies.
+
+### Most important lesson
+
+The “best `K`” depends on what you mean by “best.”
+
+- best geometric compactness,
+- best match to ground truth labels,
+- best physical interpretability,
+- or best hierarchical summary.
+
+These are not always the same.
+
+---
+
+## How to interpret the polymer hierarchy section
+
+This section deserves special attention because it is the most realistic scientific example in the project.
+
+### Why it is different from toy datasets
+
+Toy datasets are often designed to be clean.
+
+The polymer example is different because physical states can be:
+
+- broad,
+- overlapping,
+- internally heterogeneous,
+- and nested.
+
+That means:
+
+- moderate ARI does not imply failure,
+- and a rising silhouette at larger `K` may indicate sub-basin structure rather than discovery of new macrostates.
+
+### The `K=2` cut
+
+This corresponds to a coarse conceptual split:
+
+- compact-like versus extended-like conformations.
+
+If ARI is moderate rather than perfect, that is still meaningful. It suggests the hierarchy captures a coarse physical organization but not a perfectly sharp binary separation.
+
+### The `K=4` cut
+
+This corresponds to a finer-grained decomposition into four states.
+
+If ARI improves only modestly relative to `K=2`, the interpretation is often:
+
+- the known physical states overlap in feature space,
+- or the features are only partially sufficient to separate them.
+
+### Silhouette in the polymer setting
+
+If silhouette keeps increasing beyond the known four states, do **not** immediately conclude that the physical system truly has more than four states.
+
+A more careful interpretation is:
+
+- the conformational landscape may contain sub-basins,
+- splitting broad states into tighter subclusters improves compactness,
+- but those extra clusters may not correspond to distinct macrostates.
+
+This is a very important scientific lesson.
+
+---
+
+## How to interpret the performance heatmap
+
+The heatmap is the most compressed summary in the project.
+
+It tells you which linkage criterion suits which geometry.
+
+### Single linkage
+
+Think of single linkage as the **connectivity-based** option.
+
+Strengths:
+
+- circles,
+- moons,
+- filamentary structures,
+- manifold-like connected shapes.
+
+Weaknesses:
+
+- chaining,
+- noisy bridges,
+- unequal densities,
+- accidental cluster connection.
+
+### Complete linkage
+
+Think of complete linkage as the **strict compactness** option.
+
+Strengths:
+
+- compact separation,
+- anti-chaining behavior,
+- often good on anisotropic but still separated blobs.
+
+Weaknesses:
+
+- may split curved or extended connected structures.
+
+### Average linkage
+
+Think of average linkage as the **middle-ground compromise**.
+
+Strengths:
+
+- often robust,
+- less extreme than single or complete,
+- good general-purpose behavior.
+
+Weaknesses:
+
+- still not ideal for strongly non-convex manifolds.
+
+### Ward linkage
+
+Think of Ward as the **variance-minimizing blob detector**.
+
+Strengths:
+
+- excellent on compact clusters,
+- often strong on many practical structured datasets,
+- frequently best when cluster identity is about low within-cluster spread.
+
+Weaknesses:
+
+- poor on circles and other strongly non-convex structures,
+- imposes a compactness bias that may not match the data-generating geometry.
+
+---
+
+## Most important conceptual lessons
+
+If you remember only a handful of ideas from this project, remember these.
+
+### Lesson 1
+
+Hierarchical clustering produces a **tree**, not just labels.
+
+That tree contains more information than any single flat partition.
+
+### Lesson 2
+
+Different linkage methods define “cluster closeness” differently.
+
+So the clustering outcome is not determined only by the data. It is also determined by the **geometry bias** of the linkage rule.
+
+### Lesson 3
+
+Single linkage is not “bad.” It is **specialized**.
+
+It is excellent for connected manifolds, but fragile on unequal or noisy datasets.
+
+### Lesson 4
+
+Ward is not “universally best.” It is best when cluster identity is close to **compact variance-minimizing blobs**.
+
+### Lesson 5
+
+Silhouette is useful but not universal.
+
+It is aligned with compact Euclidean clustering, not necessarily with the true geometry of non-convex structures.
+
+### Lesson 6
+
+High cophenetic correlation means the dendrogram is a good geometric summary. It does **not** automatically mean the clustering labels are perfect.
+
+### Lesson 7
+
+In scientific data, moderate clustering scores can still correspond to meaningful hierarchical organization.
+
+---
+
+## Pitfalls, caveats, and known issues
+
+This section is especially important if you revisit the project later.
+
+### 1. PCA is only for visualization
+
+In the comparison and polymer plots, PCA is used to reduce the data to 2D for scatter plotting.
+
+Important:
+
+- clustering is done in the full standardized feature space,
+- PCA does **not** determine the cluster assignments.
+
+### 2. Standardization matters a lot
+
+The project standardizes features before most serious analyses.
+
+This prevents features with larger numerical scale from dominating Euclidean distance.
+
+If you remove standardization, results may change substantially.
+
+### 3. Tie-breaking in “best linkage”
+
+If multiple linkage methods have identical ARI, the printed “best linkage” may simply reflect Python’s tie-breaking order in `max(...)`, not a meaningful superiority.
+
+### 4. Silhouette can be misleading on non-convex data
+
+This is especially important for circles and moons.
+
+The correct manifold clustering may have a lower silhouette than an incorrect but more compact Euclidean partition.
+
+### 5. The current automatic “distance acceleration” heuristic should be treated cautiously
+
+In the dendrogram analysis section, the current heuristic based on reversed merge distances and `np.diff(...)` can produce nonsensical `K` suggestions on some datasets.
+
+So:
+
+- trust the dendrogram and the jump plot,
+- do not blindly trust the current automatic `K_accel` number.
+
+### 6. The header mentions connectivity constraints, but the base script may not actually implement that section
+
+If you revisit the project and do not find a connectivity-constraint demonstration, that is because the script header is broader than the functions currently implemented.
+
+### 7. Some imports may be unused in the base version
+
+Depending on which script version you are using:
+
+- `AgglomerativeClustering` may be imported but not used,
+- `inconsistent` may be imported but not used.
+
+That is not a conceptual issue, but it is useful to know when cleaning or extending the code.
+
+---
+
+## Suggested extensions
+
+Once you fully understand the current project, the next natural extensions are the following.
+
+### 1. Add scikit-learn `AgglomerativeClustering` analysis
+
+Useful for:
+
+- exploring `children_`,
+- exploring `distances_`,
+- comparing SciPy and scikit-learn representations,
+- reconstructing dendrograms from estimator internals.
+
+### 2. Add connectivity constraints
+
+Useful for:
+
+- spatial clustering,
+- graph-constrained agglomeration,
+- preventing implausible long-range merges.
+
+### 3. Add alternative distance metrics
+
+For example:
+
+- cosine distance,
+- Manhattan distance,
+- angular distance,
+- periodic-angle-aware distances for dihedral data.
+
+### 4. Add optimal leaf ordering
+
+This improves dendrogram readability without changing the cluster tree itself.
+
+### 5. Add cluster-stability analysis
+
+Useful for:
+
+- bootstrap validation,
+- subsample robustness,
+- confidence in merges.
+
+### 6. Add domain-aware polymer features
+
+For scientific work, consider:
+
+- periodic treatment of angles,
+- contact maps,
+- RMSD-based distances,
+- torsional embedding,
+- secondary-structure-aware descriptors.
+
+---
+
+## Revision guide: if you only have 10 minutes
+
+Read only these sections:
+
+1. [High-level overview of hierarchical clustering](#high-level-overview-of-hierarchical-clustering)
+2. [Understanding the linkage methods](#understanding-the-linkage-methods)
+3. [How to read a dendrogram](#how-to-read-a-dendrogram)
+4. [How to choose `K`](#how-to-choose-k)
+5. [Most important conceptual lessons](#most-important-conceptual-lessons)
+
+If you do that, you will recover the backbone of the project.
+
+---
+
+## Revision guide: if you have 1 hour
+
+Follow this order.
+
+### Pass 1 — rebuild the concepts
+
+Read:
+
+- project purpose,
+- overview of hierarchical clustering,
+- linkage methods,
+- metrics,
+- dendrogram interpretation.
+
+### Pass 2 — rebuild the code structure
+
+Read:
+
+- section-by-section walkthrough,
+- scratch implementation,
+- linkage matrix interpretation.
+
+### Pass 3 — rebuild the scientific judgment
+
+Read:
+
+- dataset interpretations,
+- polymer interpretation,
+- performance heatmap,
+- pitfalls and caveats.
+
+### Pass 4 — then rerun the code
+
+Run:
+
+```bash
+python hierarchical_v1.py
+```
+
+and compare the generated figures against what the README says they should mean.
+
+If the figures make sense without surprise, you have recovered the project.
+
+---
+
+## Glossary
+
+### Agglomerative clustering
+Bottom-up clustering that starts with singleton clusters and repeatedly merges the closest pair.
+
+### Dendrogram
+Tree visualization of the complete merge history.
+
+### Linkage criterion
+Rule used to define distance between clusters.
+
+### Single linkage
+Cluster distance based on closest pair of points.
+
+### Complete linkage
+Cluster distance based on farthest pair of points.
+
+### Average linkage
+Cluster distance based on average cross-cluster distance.
+
+### Ward linkage
+Merge rule that minimizes increase in within-cluster variance.
+
+### Linkage matrix
+Numerical encoding of the hierarchical merge tree.
+
+### Cophenetic distance
+Dendrogram height at which two samples first become part of the same cluster.
+
+### Cophenetic correlation
+Correlation between original pairwise distances and cophenetic distances.
+
+### Silhouette
+Compactness-and-separation metric for a flat clustering.
+
+### ARI
+Adjusted Rand Index; label agreement measure corrected for chance.
+
+### Chaining
+Tendency of single linkage to connect samples through local bridges into long structures.
+
+### Non-convex cluster
+A cluster whose natural shape is curved or hollow rather than blob-like.
+
+### Hierarchical structure
+Nested organization where small groups combine into larger groups across scales.
+
+---
+
+## Final takeaway
+
+This project teaches a very important principle:
+
+> clustering is not just about applying an algorithm. It is about matching the algorithm’s geometric bias to the structure that is meaningful in your data.
+
+If you remember that one sentence, you will already be thinking about hierarchical clustering the right way.
