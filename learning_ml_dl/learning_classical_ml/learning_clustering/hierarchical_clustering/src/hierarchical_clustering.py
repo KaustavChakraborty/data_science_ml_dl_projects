@@ -1,6 +1,6 @@
 """
 ================================================================================
-hierarchical_v1_annotated.py
+hierarchical_clustering.py
 ================================================================================
 
 This is a heavily documented version of the user's original hierarchical
