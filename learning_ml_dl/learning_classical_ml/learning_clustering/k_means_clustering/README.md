@@ -1,4 +1,4 @@
-You're right — here is a **much more exhaustive, project-level `README.md`**, written as a serious, documentation-quality file you can place directly in the repository.
+
 
 ````md
 # K-Means Clustering Tutorial Project
@@ -194,7 +194,7 @@ clustering/
 ├── plots/
 │   ├── datasets/
 │   │   ├── synthetic_overview.png
-│   │   └── softmatter_pca.png
+│   │   
 │   │
 │   └── kmeans/
 │       ├── init_comparison.png
