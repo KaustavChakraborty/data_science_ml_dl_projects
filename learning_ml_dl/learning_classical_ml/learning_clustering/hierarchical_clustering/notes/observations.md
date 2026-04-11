@@ -1,806 +1,789 @@
-# observations.md
+# Observations.md — Hierarchical Clustering Project
 
-# K-Means Clustering — Detailed Observations and Experimental Analysis
+## Purpose of this document
 
-## Project overview
+This file records the **main empirical observations, interpretations, patterns, successes, failures, and cautionary lessons** from the hierarchical clustering project. It is written as a long-form revision document so that, at a much later time, I can come back to this project and quickly recover:
 
-This project studies **K-means clustering** from both a **theoretical** and a **practical** perspective. The workflow includes:
+- what each experiment was trying to show,
+- what the outputs actually showed,
+- what the linkage methods were doing,
+- why some methods worked and others failed,
+- how to interpret dendrograms, ARI, silhouette, and cophenetic correlation together,
+- and what broader clustering principles emerged from the full set of results.
 
-- a **scratch implementation** of K-means using NumPy
-- a comparison with **scikit-learn's KMeans**
-- an empirical study of **initialization strategies**
-- a systematic study of **how to choose the number of clusters \(K\)**
-- a detailed examination using **silhouette plots**
-- a visualization of **failure modes**
-- a runtime-quality comparison between **standard KMeans** and **MiniBatchKMeans**
-
-The experiments show not only where K-means performs extremely well, but also where it fails due to geometric assumptions built into the algorithm.
+This is **not** a code walkthrough. The README is for the full project structure and theory. This file is specifically for the **observed outcomes and their interpretation**.
 
 ---
 
-# 1. Core understanding developed through this project
+## Big-picture conclusion of the whole project
 
-K-means is a centroid-based clustering algorithm that partitions a dataset into \(K\) groups by minimizing the **within-cluster sum of squares (WCSS)**, also called **inertia**. The algorithm works by repeatedly:
+The single most important conclusion from this project is:
 
-1. assigning each point to the nearest centroid
-2. recomputing each centroid as the mean of the points assigned to it
-3. stopping when centroid movement becomes sufficiently small
+> **There is no universally best linkage method. The best linkage depends on the geometry that defines a meaningful cluster in the dataset.**
 
-This project makes one thing especially clear:
+Across all experiments, the results showed a very clear pattern:
 
-> K-means is highly effective when the data contains compact, well-separated, approximately spherical clusters, but its performance degrades when the data geometry violates those assumptions.
+- **Ward linkage** is excellent when the true clusters are compact, blob-like, and variance-defined.
+- **Single linkage** is uniquely powerful when the true clusters are non-convex connected structures such as circles or moons.
+- **Complete linkage** is often strong when one wants compact clusters and resistance to chaining.
+- **Average linkage** is frequently the most balanced compromise across different dataset types.
+- Metrics such as **silhouette** can be very helpful on convex cluster structure, but can become misleading on non-convex manifolds.
+- Dendrograms are valuable not only for flat clustering, but also for understanding **coarse-to-fine hierarchy** in the data.
 
-That single statement is supported throughout all experiments in this repository.
+A second major lesson is:
+
+> **Good clustering must always be interpreted relative to the structure one is trying to recover.**
+
+If the desired notion of a cluster is “compact low-variance group,” Ward is often appropriate.
+If the desired notion is “connected curved manifold,” single linkage may be the only correct method.
+If the desired notion is “physically interpretable states with internal substructure,” dendrogram interpretation may matter more than flat labels.
 
 ---
 
-# 2. Validation of the scratch implementation
+# 1. Scratch agglomerative clustering on the tiny toy dataset
 
-## Observation
+## Main outcome
 
-The NumPy-based `KMeansScratch` implementation produces the same result as `sklearn.cluster.KMeans` on the `blobs_easy` dataset.
+On the tiny 10-point toy dataset, all four linkage methods produced perfect 2-cluster recovery:
 
-Reported result:
+- single: ARI = 1.000
+- complete: ARI = 1.000
+- average: ARI = 1.000
+- ward: ARI = 1.000
 
-- Scratch inertia = `24.8783`
-- sklearn inertia = `24.8783`
-- Scratch ARI = `1.0000`
-- sklearn ARI = `1.0000`
+The scikit-learn-based analysis also confirmed this and showed that all methods produced:
+
+- `K = 2`
+- `ARI = 1.000`
+- `Silhouette ≈ 0.724`
 
 ## Interpretation
 
-This is a strong validation of the scratch implementation.
+This toy dataset had a very strong and visually obvious two-cluster structure:
 
-Matching inertia means:
+- one small lower-left group,
+- one upper-right group,
+- clear separation between them,
+- and no ambiguous bridge points.
 
-- both implementations are optimizing the same objective
-- the distance computations, assignments, centroid updates, and stopping logic are correct
-- the custom implementation reaches the same final local optimum as sklearn on this dataset
+Because the top-level separation was so strong, all linkage methods agreed on the same final flat partition when cut at `K=2`.
 
-Matching ARI means:
+## Important observation
 
-- both methods recover the true cluster structure perfectly
-- the grouping itself is correct, not just the objective value
+Although the final labels were identical, the **merge histories were not identical**.
 
-## Important nuance
+This is a key lesson:
 
-The exact numeric labels assigned to clusters do not matter. Cluster `0` in one run may correspond to cluster `2` in another run. Metrics like **ARI** handle label permutation correctly, so ARI = 1 means the clustering structure is exactly recovered even if cluster IDs differ.
+> Different linkage rules can produce different dendrograms but the same flat clustering at a chosen K.
 
-## Practical takeaway
+This is especially important when teaching hierarchical clustering. Agreement in ARI at one chosen K does **not** imply the full trees are the same.
 
-The scratch implementation is not only pedagogically useful but also empirically correct on a clean benchmark. This gives confidence in the manual implementation before moving on to more advanced analysis.
+## Single-linkage-specific observation on the toy set
+
+Single linkage tended to grow clusters through local nearest-neighbor bridges. This was visible in its merge ordering and merge-distance trajectory.
+
+This confirmed the classic chaining behavior of single linkage.
+
+On this simple dataset, chaining did not cause failure, because the two big groups were so well separated that local bridges stayed within the correct macro-cluster.
+
+## Main lesson from the toy example
+
+The toy example was ideal for understanding the mechanics of hierarchical clustering because it showed:
+
+- what a linkage matrix is doing,
+- what a dendrogram is encoding,
+- how cluster labels are extracted by cutting the tree,
+- and how different linkage definitions can agree at the coarse level while differing internally.
 
 ---
 
-# 3. Behavior on the easy benchmark dataset
+# 2. Linkage comparison on isotropic blobs
 
-## Dataset: `blobs_easy`
+## Main numerical result
 
-This dataset consists of:
+All four linkage methods achieved perfect recovery:
 
-- 3 compact Gaussian blobs
-- clear separation between clusters
-- approximately isotropic shape
-- balanced cluster geometry
+- single = 1.000
+- complete = 1.000
+- average = 1.000
+- ward = 1.000
 
-This is the near-ideal environment for K-means.
+Silhouette at `K=3` was also very high:
 
-## Observation
-
-Every major experiment on this dataset indicates that K-means is an excellent fit.
-
-Evidence:
-
-- perfect ARI
-- perfect AMI
-- high silhouette score
-- clear elbow at \(K=3\)
-- unanimous agreement across all K-selection methods
-- highly stable performance under k-means++ initialization
+- silhouette ≈ 0.875
 
 ## Interpretation
 
-`blobs_easy` satisfies the assumptions of K-means unusually well:
+This dataset is the classic easy case for clustering:
 
-- each cluster can be represented by a centroid
-- Euclidean distance is meaningful
-- within-cluster spread is small
-- between-cluster separation is large
+- three compact blobs,
+- nearly isotropic shape,
+- strong separation,
+- no curved structure,
+- no strong density imbalance,
+- no bridges or chaining paths.
 
-This dataset is therefore an ideal pedagogical benchmark for understanding how K-means behaves under favorable conditions.
+In this geometry, essentially every reasonable agglomerative linkage can recover the correct partition.
 
----
+## Important observation about the “best linkage” line
 
-# 4. Initialization matters: random vs k-means++
+The code reported:
 
-## Experiment summary
+> Best linkage: single
 
-The project compares two initialization strategies across many repeated runs:
+But this should **not** be interpreted as a scientific preference for single linkage on isotropic blobs.
 
-- `init="random"`
-- `init="k-means++"`
+It was only the consequence of tie-breaking in the code: since all ARIs were equal, Python returned the first method in the dictionary/order.
 
-with `n_init=1` in each case so that each run reflects a single initialization event.
+Scientifically, this result means:
 
-Reported result:
+> All linkage methods tied perfectly on isotropic blobs.
 
-- random: mean inertia = `119.47 ± 178.41`
-- k-means++: mean inertia = `24.88 ± 0.00`
+## What this tells me about silhouette
 
-Average convergence iterations:
+Silhouette is highly trustworthy here because the dataset matches the assumptions behind silhouette:
 
-- random ≈ `4.3`
-- k-means++ ≈ `2.0`
+- clusters are compact,
+- separation is strong,
+- cluster shape is roughly convex.
 
-## Main observation
+So the very high silhouette is fully consistent with the perfect ARI.
 
-Initialization has a **very strong effect** on both:
+## Deeper conceptual lesson
 
-- final clustering quality
-- optimization speed
+On clean isotropic blobs:
 
-## What the results mean
+- linkage choice matters very little,
+- both label-based and geometry-based metrics agree,
+- dendrogram structure is stable,
+- K-selection is easy,
+- and the dataset behaves like the ideal textbook case.
 
-### Random initialization
-
-Random initialization shows:
-
-- very large variability in final inertia
-- occasional convergence to the optimal solution
-- repeated convergence to much worse local minima
-- slower average convergence
-
-This suggests that random initialization often places multiple centroids in the same true cluster or fails to place an initial centroid in an important region of the data.
-
-### K-means++
-
-K-means++ shows:
-
-- nearly zero variability in final inertia
-- consistently optimal or near-optimal clustering
-- much faster convergence
-- dramatically improved robustness
-
-This indicates that the k-means++ initialization successfully spreads the starting centroids across the natural data structure.
-
-## Important nuance
-
-The success of k-means++ here is unusually clean because the dataset itself is easy. On more complex datasets, k-means++ will still usually help, but it may not always collapse to a single perfect final inertia value the way it does here.
-
-## Practical takeaway
-
-K-means++ should be preferred over naive random initialization in almost all practical use cases.
+This dataset serves as the “control” experiment for the project.
 
 ---
 
-# 5. sklearn KMeans performance summary
+# 3. Linkage comparison on two moons
 
-The sklearn demo reports:
+## Main numerical result
 
-- inertia = `24.8783`
-- iterations = `2`
-- ARI = `1.0000`
-- AMI = `1.0000`
-- silhouette = `0.8751`
+The methods behaved very differently:
 
-## Interpretation of each number
+- single = 1.000
+- complete = 0.483
+- average = 0.583
+- ward = 0.583
 
-### Inertia = 24.8783
+The silhouette scores did **not** align with ARI in the way one might expect:
 
-This is the final within-cluster sum of squares on the scaled dataset.
-
-Interpretation:
-- the clusters are very compact
-- points are close to their assigned centroids
-- the K-means objective is minimized very effectively
-
-### Iterations = 2
-
-Convergence in only 2 iterations indicates:
-
-- the initialization was already very close to the final optimum
-- the data structure is simple and strongly clusterable
-- the optimization landscape is easy for K-means on this dataset
-
-### ARI = 1.0000
-
-The clustering matches the true labels perfectly.
-
-### AMI = 1.0000
-
-Mutual information agreement is also perfect, confirming that the learned partition and the true partition are identical in grouping structure.
-
-### Silhouette = 0.8751
-
-This is a very high value.
-
-Interpretation:
-- points are much closer to their own cluster than to neighboring clusters
-- the separation between groups is very strong
-- cluster assignments are highly reliable
-
-## Practical takeaway
-
-This is an almost ideal K-means result. The algorithm is not merely acceptable here; it is exceptionally well matched to the geometry of the data.
-
----
-
-# 6. Choosing the number of clusters: detailed analysis of `choose_K_easy_blobs.png`
-
-This is one of the most important outputs of the project.
-
-The following methods were compared for \(K = 2, 3, \dots, 8\):
-
-- Elbow
-- Silhouette
-- Calinski-Harabasz
-- Davies-Bouldin
-- Gap statistic
-
-Reported result:
-
-- Elbow: `K = 3`
-- Silhouette: `K = 3`
-- Calinski-Harabasz: `K = 3`
-- Davies-Bouldin: `K = 3`
-- Gap statistic: `K = 3`
-
-## Why this result is significant
-
-All five methods agree on the same answer. That means the conclusion is supported from multiple independent perspectives:
-
-- compactness
-- separation
-- between/within-cluster ratio
-- cluster similarity penalty
-- comparison to random-reference clustering
-
-This level of agreement is unusually strong and indicates that the dataset has a very clear natural clustering structure.
-
----
-
-## 6.1 Elbow method panel
-
-### Observation
-
-The WCSS curve shows:
-
-- a very large drop from \(K=2\) to \(K=3\)
-- much smaller decreases for \(K > 3\)
-
-### Interpretation
-
-This is the classic elbow pattern.
-
-At \(K=2\):
-- one centroid is forced to represent what are actually two distinct real blobs
-- within-cluster dispersion remains large
-
-At \(K=3\):
-- each true blob can get its own centroid
-- WCSS decreases dramatically
-
-For \(K>3\):
-- extra centroids mostly split already compact clusters
-- improvement continues, but only marginally
-
-### Nuance
-
-Inertia always decreases with increasing \(K\), so the best \(K\) is **not** found by minimizing inertia directly. Instead, one looks for the point where the improvement becomes much less significant. In this dataset, that turning point is very clearly \(K=3\).
-
----
-
-## 6.2 Silhouette score panel
-
-### Observation
-
-Approximate values:
-
-- \(K=2\): `0.703`
-- \(K=3\): `0.875`
-- \(K=4\): `0.701`
-- \(K=5\): `0.536`
-- \(K>=6\): about `0.35`
-
-### Interpretation
-
-This panel provides some of the clearest evidence for the correct number of clusters.
-
-At \(K=3\):
-- silhouette reaches its maximum
-- the increase relative to \(K=2\) is large
-- cluster assignments are clearly strongest here
-
-At \(K=2\):
-- the score is still reasonably good
-- but not optimal
-- this suggests that merging two true blobs still gives a somewhat coherent partition, though not the true one
-
-At \(K=4\):
-- the score returns to about the same level as \(K=2\)
-- but now the error is different: instead of merging true groups, K-means begins splitting a natural group
-
-At \(K=5\) and above:
-- silhouette drops substantially
-- this indicates over-fragmentation
-- points become closer to rival subclusters inside the same original blob
-
-### Nuance
-
-A very important lesson emerges here:
-
-> A wrong value of \(K\) can still produce a respectable silhouette score.
-
-For example, both \(K=2\) and \(K=4\) produce values around `0.70`, but those correspond to different structural mistakes:
-- \(K=2\): under-clustering by merging groups
-- \(K=4\): over-clustering by splitting groups
-
-This is why the **full silhouette plots** are essential and not just the average score.
-
----
-
-## 6.3 Calinski-Harabasz panel
-
-### Observation
-
-The CH index peaks sharply at \(K=3\).
-
-### Interpretation
-
-The Calinski-Harabasz score rewards:
-
-- high between-cluster separation
-- low within-cluster dispersion
-
-At \(K=3\), that trade-off is optimal:
-- each true group is captured cleanly
-- clusters are tight and far apart
-
-At \(K=2\):
-- within-cluster spread is too large because two true groups are merged
-
-At \(K>3\):
-- splitting compact true groups does not create meaningful new between-cluster structure
-- the score declines
-
-### Practical takeaway
-
-The CH index strongly supports the interpretation that the natural structure of the data is exactly three clusters.
-
----
-
-## 6.4 Davies-Bouldin panel
-
-### Observation
-
-The Davies-Bouldin index has a clear minimum at \(K=3\).
-
-### Interpretation
-
-Davies-Bouldin measures how similar clusters are to one another, combining:
-- internal spread
-- distance to other clusters
-
-Lower values are better.
-
-At \(K=3\):
-- clusters are compact
-- clusters are far from one another
-- similarity between clusters is minimized
-
-At larger \(K\):
-- one or more true clusters are split into nearby subclusters
-- these subclusters become similar and close to each other
-- the DB index rises
-
-### Nuance
-
-This metric is particularly good at penalizing unnecessary splits. That is why it becomes much worse once \(K\) exceeds the natural number of groups.
-
----
-
-## 6.5 Gap statistic panel
-
-### Observation
-
-The Gap statistic jumps strongly from \(K=2\) to \(K=3\), then becomes approximately flat or slightly lower afterward.
-
-### Interpretation
-
-The Gap statistic asks:
-
-> How much better does the real data cluster than random reference data?
-
-At \(K=3\), the answer becomes substantially stronger than at \(K=2\).
-
-That means:
-- three-cluster structure is genuinely meaningful
-- the dataset is not merely being partitioned well because of random geometry
-- the improvement at \(K=3\) is structurally real
-
-For \(K>3\):
-- real data still clusters somewhat better than random data
-- but the additional benefit over \(K=3\) is not substantial
-
-### Important nuance
-
-The standard gap rule prefers the **smallest sufficient K**, not necessarily the absolute largest raw gap value. That makes it conservative and helps avoid overfitting the number of clusters.
-
-### Practical takeaway
-
-The Gap statistic provides a more statistically grounded confirmation that \(K=3\) is the correct choice.
-
----
-
-## 6.6 Consensus / voting panel
-
-### Observation
-
-All five methods vote for `K = 3`.
-
-### Interpretation
-
-This is a very strong result.
-
-Each method is measuring something different:
-- Elbow measures diminishing returns in WCSS reduction
-- Silhouette measures pointwise assignment quality
-- CH measures between/within spread ratio
-- DB measures inter-cluster similarity
-- Gap compares real clustering to randomness
-
-When all of them agree, the evidence for the chosen \(K\) becomes very compelling.
-
-## Final conclusion from `choose_K_easy_blobs.png`
-
-The dataset has a clear and unambiguous natural clustering structure at:
-
-\[
-K = 3
-\]
-
-This conclusion is supported simultaneously by five independent cluster-selection principles.
-
----
-
-# 7. Detailed analysis of `silhouette_easy_blobs.png`
-
-This is arguably the most instructive diagnostic figure in the project.
-
-It shows silhouette bands for:
-
-- \(K=2\)
-- \(K=3\)
-- \(K=4\)
-- \(K=5\)
-
-A silhouette plot is more informative than a single average silhouette number because it reveals:
-
-- the distribution of pointwise assignment quality
-- cluster balance
-- weak clusters
-- tails of poorly assigned points
-- whether problems are global or localized
-
----
-
-## 7.1 K = 2
-
-Mean silhouette ≈ `0.703`
-
-### Observation
-
-The clustering looks reasonably good on average.
-
-Most points appear to have positive silhouette values, and many are moderately large.
-
-### Interpretation
-
-This indicates that even with only 2 clusters, the partition is not completely unnatural. That makes sense because the three true blobs are well separated, so K-means can merge two true blobs into one larger cluster while still preserving some overall separation.
-
-### Nuance
-
-This is a very important lesson:
-
-> A clustering can have a decent silhouette score and still be wrong.
-
-At \(K=2\), the algorithm is under-clustering:
-- it is merging two true groups
-- one resulting cluster is doing too much representational work
-
-This gives a reasonably good but not truly correct partition.
-
-### What to learn from it
-
-Do not interpret a silhouette score around `0.70` as automatically “correct.” It can still represent a merged-cluster solution.
-
----
-
-## 7.2 K = 3
-
-Mean silhouette ≈ `0.875`
-
-### Observation
-
-This is the strongest panel by far.
-
-The silhouette bands are:
-- wide
-- consistently shifted toward high values
-- balanced across clusters
-- almost entirely positive
-- close to the right side of the axis
-
-### Interpretation
-
-This indicates an almost ideal clustering:
-
-- each cluster is highly coherent internally
-- each cluster is strongly separated from the others
-- points overwhelmingly belong much more strongly to their assigned cluster than to any alternative cluster
-
-### Why this is better than just “highest mean”
-
-The average silhouette is excellent, but more importantly:
-
-- all three clusters look strong
-- there is no weak cluster dragging the quality down
-- there are essentially no dubious assignments
-
-This means the success is not driven by only one or two strong clusters. It is a genuinely high-quality partition across the entire dataset.
-
-### Practical conclusion
-
-This panel provides the strongest evidence that \(K=3\) is the natural clustering.
-
----
-
-## 7.3 K = 4
-
-Mean silhouette ≈ `0.701`
-
-### Observation
-
-The mean score is close to that of \(K=2\), but the structure is different.
-
-### Interpretation
-
-This is an example of **over-clustering**.
-
-K-means likely takes one of the true blobs and splits it into two nearby artificial subclusters. Those two subclusters are each internally coherent enough to keep the silhouette from collapsing, but they are close to each other, so separation is weaker.
-
-### Nuance
-
-This is one of the deepest lessons in the silhouette analysis:
-
-> Similar average silhouette values can correspond to very different kinds of mistakes.
-
-- \(K=2\): not enough clusters, true groups merged
-- \(K=4\): too many clusters, true groups split
-
-So the mean score alone is not enough. The band structure matters.
-
-### What to learn from it
-
-A silhouette score around `0.70` is not enough to conclude that \(K=4\) is acceptable. The full plot shows that the internal geometry is weaker than at \(K=3\).
-
----
-
-## 7.4 K = 5
-
-Mean silhouette ≈ `0.536`
-
-### Observation
-
-This panel is clearly weaker.
-
-The silhouette bands become:
-- more fragmented
-- more uneven
-- shifted leftward
-- less convincing overall
-
-### Interpretation
-
-At this point, K-means is strongly over-fragmenting the natural structure.
-
-The original compact blobs are being carved into several smaller centroid-based regions. These artificial subclusters are not far from one another, so points become less confidently assigned.
-
-### Important nuance
-
-A drop from `0.875` to `0.536` is major.
-
-Even if many values remain positive, the clustering quality has degraded substantially:
-- cohesion is reduced
-- separation is reduced
-- the partition no longer matches the true natural grouping
-
-### Practical takeaway
-
-Values of \(K\) larger than the true natural count quickly create artificial structure that is mathematically legal for K-means but not meaningful for the data.
-
----
-
-## Final conclusion from `silhouette_easy_blobs.png`
-
-The silhouette figure teaches several important nuances:
-
-1. \(K=3\) is clearly optimal, both in mean score and in full cluster-by-cluster quality.
-2. \(K=2\) is an under-clustered solution that still looks moderately good on average.
-3. \(K=4\) is an over-clustered solution that can look deceptively acceptable if only the average is considered.
-4. \(K=5\) and beyond clearly degrade the structure.
-
-### Most important lesson
-
-> The full silhouette plot is much more informative than the mean silhouette score alone.
-
-It shows **how** a solution is wrong, not just **how much** it is wrong.
-
----
-
-# 8. Failure modes: what the experiments teach
-
-The failure-mode figure studies four datasets:
-
-- concentric circles
-- two moons
-- anisotropic blobs
-- unequal-size blobs
-
-This section is crucial because it shows that K-means has geometric biases.
-
----
-
-## 8.1 Concentric circles
-
-Reported ARI ≈ `-0.002`
-
-### Interpretation
-
-This is essentially complete failure.
-
-Why?
-- the true clusters are nested rings
-- both rings have nearly the same center
-- K-means can only partition based on centroid distance
-- so it cuts the rings in an angular or wedge-like fashion rather than separating inner vs outer ring
-
-### Lesson
-
-K-means cannot represent nested non-convex structure.
-
----
-
-## 8.2 Two moons
-
-Reported ARI ≈ `0.445`
-
-### Interpretation
-
-This is a partial failure.
-
-Why?
-- the true clusters are curved and interleaved
-- K-means prefers straight-line / Voronoi-style partitions
-- it can capture some rough separation, but not the correct nonlinear geometry
-
-### Lesson
-
-K-means struggles on non-convex manifolds.
-
----
-
-## 8.3 Anisotropic blobs
-
-Reported ARI ≈ `0.980`
-
-### Interpretation
-
-This result is interesting because it is much better than one might expect.
-
-The dataset was included as a stress case because elongated clusters can challenge K-means, but here the elongation is not severe enough to destroy centroid-based separability. The means remain well separated, so K-means still performs very well.
-
-### Lesson
-
-“K-means struggles on anisotropic data” is a tendency, not an absolute rule.
-
----
-
-## 8.4 Unequal-size blobs
-
-Reported ARI ≈ `0.684`
-
-### Interpretation
-
-This is a moderate failure.
-
-The large diffuse cluster is not handled as well as the compact clusters. K-means tends to split or distort large spread-out clusters because it prefers balanced Voronoi-style partitions.
-
-### Lesson
-
-K-means is sensitive to cluster size imbalance and density imbalance.
-
----
-
-# 9. MiniBatchKMeans analysis
-
-Reported result:
-
-- Full KMeans: `0.38s`, inertia = `308565.7`
-- MiniBatchKMeans: `0.05s`, inertia = `309405.3`
-- Speed-up = `7.5×`
-- Inertia loss = `0.27%`
-- ARI agreement = `0.9617`
+- single had the best ARI, but lower silhouette than some incorrect solutions.
 
 ## Interpretation
 
-This is an excellent trade-off.
+This was one of the most important results in the whole project.
 
-MiniBatchKMeans is much faster while preserving almost all clustering quality.
+The two-moons dataset is **non-convex**. The true clusters are not compact round blobs. Each cluster is an extended curved manifold.
 
-### Speed-up
+That means the correct clustering is based on **connectedness along the moon**, not on compact Euclidean grouping.
 
-A 7.5× speed-up is substantial.
+## Why single linkage was perfect
 
-### Inertia loss
+Single linkage only asks for the closest cross-cluster pair. That allows it to chain along each moon through local neighbor connections.
 
-Only `0.27%` worse than full KMeans means the approximation is extremely accurate in terms of the K-means objective.
+This is exactly the right inductive bias for the two-moons dataset.
 
-### ARI agreement
+Usually, chaining is treated as a weakness of single linkage. But on two moons, it becomes the central reason for success.
 
-An ARI of `0.9617` between the two clusterings means the resulting partitions are very similar.
+So this result taught a very important lesson:
 
-## Practical takeaway
+> A property that is a weakness on one dataset can be the decisive strength on another.
 
-MiniBatchKMeans is a strong practical alternative for large datasets when speed matters.
+## Why complete / average / Ward were imperfect
+
+These methods prefer more compact clusters.
+
+- Complete is strict and dislikes elongated shapes.
+- Average is more moderate but still Euclidean/compactness-oriented.
+- Ward explicitly prefers low-variance compact groups.
+
+Since each moon is long and curved, those methods tend to split the moons into geometrically compact pieces rather than preserving the entire moon as a single cluster.
+
+Hence the lower ARIs.
+
+## Important lesson about silhouette on non-convex data
+
+This experiment showed clearly that silhouette can be misleading.
+
+The correct moon clustering is not especially compact in Euclidean space, so silhouette does not reward it as strongly as one might expect.
+
+Some geometrically incorrect solutions can obtain comparable or even better silhouette because they partition the moons into tighter convex chunks.
+
+Therefore:
+
+> On non-convex manifold datasets, silhouette should not be trusted blindly.
+
+This is one of the most important cautionary notes in the whole project.
+
+## Main lesson from two moons
+
+The result demonstrates that:
+
+- cluster geometry matters more than metric scores alone,
+- manifold-shaped clusters need connectivity-aware linkage,
+- and single linkage can be exactly right when cluster identity is about connected shape.
 
 ---
 
-# 10. Main conceptual lessons learned from the project
+# 4. Dendrogram analysis on isotropic blobs (Ward)
 
-## 10.1 K-means is powerful when the geometry is right
+## Main numerical result
 
-It works extremely well for:
-- compact clusters
-- spherical or near-spherical groups
-- balanced densities
-- centroid-separable structure
+- Cophenetic correlation (Ward) = 0.9841
+- Single = 0.9682
+- Complete = 0.9825
+- Average = 0.9853
+- Ward = 0.9841
 
-## 10.2 Initialization matters a lot
+The dendrogram showed very large jumps at the final merges.
 
-- random initialization can be unstable
-- k-means++ dramatically improves both quality and convergence speed
+The current “distance acceleration” heuristic, however, gave a nonsensical suggested K of 558.
 
-## 10.3 Choosing K should be evidence-based
+## Interpretation of the dendrogram
 
-Multiple metrics should be checked together. On clean datasets, they may agree strongly. On harder datasets, disagreement can itself be informative.
+The dendrogram showed:
 
-## 10.4 Silhouette mean is useful but not sufficient
+- many low-cost within-blob merges,
+- then a large late-stage jump when forced to merge the three main blobs into fewer groups.
 
-The full silhouette plot gives much deeper insight than the average score alone.
+This is exactly what one wants for a clean 3-cluster dataset.
 
-## 10.5 K-means fails for understandable geometric reasons
+The meaningful structure is:
 
-Its failure is not random. It struggles when the data violates its centroid-and-Euclidean assumptions.
+- low merge heights = merges within a true blob,
+- high late merge heights = forced merges between different true blobs.
 
-## 10.6 Approximate clustering can be very valuable
+Thus the dendrogram strongly supported `K=3`.
 
-MiniBatchKMeans demonstrates that in large-scale settings, near-optimal clustering can often be obtained much faster.
+## Interpretation of the cophenetic correlation
+
+A cophenetic correlation near 0.984 means the dendrogram represents the original pairwise distance geometry extremely well.
+
+This was expected because isotropic blobs are clean, well separated, and highly compatible with a tree-like hierarchical representation.
+
+It is notable that all methods achieved very high cophenetic correlations on this dataset. That means the dataset itself is very friendly to hierarchical summarization.
+
+## Important caution: the K-acceleration heuristic was flawed
+
+The printed value `K = 558` is obviously meaningless for a dataset with 3 visible blobs.
+
+This means the implementation of the automatic K-selection heuristic based on reversed merge-distance differences was not conceptually correct.
+
+This is a crucial observation for future revision:
+
+> The dendrogram itself was excellent, but the current automatic “distance acceleration” K-selection formula was not trustworthy.
+
+Therefore the plot should be interpreted visually and in conjunction with silhouette/ARI, not through that printed K value.
+
+## Main lesson
+
+This section showed that dendrograms are powerful for interpretation, but automatic heuristics built on top of them must be validated carefully.
 
 ---
 
-# 11. Final conclusion
+# 5. K selection on isotropic blobs
 
-This project successfully demonstrates K-means from first principles to practical usage.
+## Main numerical result
 
-The experiments show:
+- Best K by silhouette = 3 (0.875)
+- Best K by ARI = 3 (1.000)
 
-- the scratch implementation is correct
-- sklearn behavior is well understood
-- k-means++ is far superior to naive random initialization
-- the correct number of clusters in the easy benchmark is unambiguously \(K=3\)
-- silhouette analysis reveals not only the best K but also the character of wrong K values
-- failure cases illustrate the geometric limits of K-means
-- MiniBatchKMeans offers an excellent practical speed-quality trade-off
+## Interpretation
 
-Overall, the project gives a strong conceptual and practical foundation for understanding when K-means should be trusted, when it should be questioned, and how to diagnose its behavior rigorously.
+This result was as clean as possible.
+
+The silhouette curve and the ARI curve both peaked at exactly the true number of clusters.
+
+This means:
+
+- the correct clustering is also the most geometrically natural one,
+- the dataset has a clear and stable cluster count,
+- and unsupervised and supervised criteria agree completely.
+
+## Detailed reading of the curves
+
+### At K = 2
+
+Silhouette is decent, but lower than at 3.
+ARI is also much lower.
+
+This means that with only 2 clusters, the model is forced to merge two genuine blobs together.
+
+### At K = 3
+
+This is the optimum:
+
+- each true blob gets one cluster,
+- compactness is maximized,
+- separation is maximized,
+- and labels match perfectly.
+
+### At K > 3
+
+Both silhouette and ARI decline.
+
+This indicates over-segmentation:
+
+- true blobs are being split into multiple artificial subclusters,
+- which hurts label agreement,
+- and also reduces cluster separation because nearby subclusters now compete with each other.
+
+## Main lesson
+
+The isotropic K-selection plot is the clean textbook demonstration of:
+
+- under-clustering for too-small K,
+- optimal clustering at the natural K,
+- over-clustering for too-large K.
+
+---
+
+# 6. Polymer conformation hierarchy
+
+## Main numerical result
+
+- Cophenetic r (Ward) = 0.7475
+- ARI at K=2 (compact vs extended) = 0.6197
+- ARI at K=4 (all states) = 0.6479
+
+The silhouette curve kept increasing at larger K and reached its best values well above 4.
+
+## High-level interpretation
+
+This was the most scientifically realistic dataset in the project.
+
+Unlike blobs or moons, the polymer conformational data were not expected to form perfectly isolated idealized clusters.
+
+Instead, the data appeared to contain:
+
+- coarse physical hierarchy,
+- overlapping or partially mixed states,
+- diffuse basins,
+- sub-basin structure within larger states,
+- and only moderate separability of the labeled classes.
+
+## Interpretation of the dendrogram
+
+The dendrogram suggested a genuine **two-level hierarchy**:
+
+- a broad coarse split at the top,
+- with finer subdivision lower down.
+
+This is physically meaningful because conformational ensembles often organize in nested ways:
+
+- broad macrostate classes,
+- within which there are more specific conformational subtypes.
+
+So the dendrogram was valuable not because it perfectly reproduced labels, but because it revealed a plausible physical hierarchy.
+
+## Interpretation of K = 2 result
+
+At `K=2`, the clustering was compared to a coarse binary interpretation: compact vs extended.
+
+ARI ≈ 0.62 means the coarse split is partially meaningful but not perfect.
+
+This suggests that the data do have a broad binary organization, but the mapping from that binary split to the true physical labels is not exact.
+
+That makes sense in a conformational setting because:
+
+- some states may share compactness characteristics but differ in dihedrals,
+- some states may overlap in one observable and differ in another,
+- and broad physical categories are usually fuzzy rather than perfectly separable.
+
+## Interpretation of K = 4 result
+
+At `K=4`, the ARI improves only slightly to ≈ 0.648.
+
+This is very important.
+
+If the four labeled states were cleanly separated in the chosen feature space, the ARI should have risen dramatically at K=4.
+Instead, the improvement is modest.
+
+This tells me that:
+
+- the labels are real and meaningful,
+- but they are not sharply isolated in the chosen features,
+- and hierarchical clustering cannot recover them perfectly because the state distributions overlap.
+
+## Interpretation of the PCA panels
+
+The PCA plots visually supported this conclusion.
+
+Some states appeared compact and distinct, while others were broad, diffuse, or partially overlapping.
+
+Therefore the moderate ARIs are not evidence of algorithm failure. Rather, they reflect genuine structure in the data:
+
+- some states are easy,
+- some are broad ensembles,
+- some are internally heterogeneous.
+
+## Interpretation of the silhouette-vs-K curve
+
+This panel is easy to misread unless stated explicitly.
+
+Silhouette continued to improve for K greater than 4, even reaching its best values near K=7.
+
+This does **not** mean the system truly contains seven physical macrostates.
+
+More likely, it means:
+
+- broad conformational states contain sub-basin structure,
+- splitting those into tighter geometric clusters increases silhouette,
+- but those extra clusters may not correspond to distinct named physical states.
+
+This is a crucial physical interpretation lesson:
+
+> Higher silhouette at larger K can reflect geometric substructure, not necessarily new physically meaningful macrostates.
+
+## Interpretation of cophenetic correlation
+
+A cophenetic correlation of 0.7475 is respectable but far below the values for isotropic blobs.
+
+This tells me that the polymer data are only moderately tree-like.
+
+That is exactly what I would expect for a real conformational landscape:
+
+- partially hierarchical,
+- partially overlapping,
+- not perfectly representable by a simple dendrogram.
+
+## Main lesson from the polymer section
+
+This was the most realistic demonstration that hierarchical clustering is not always about recovering one “correct” flat labeling.
+
+Sometimes the important output is the **hierarchy itself**:
+
+- broad coarse division,
+- finer substructure,
+- imperfect separability of states,
+- and the possibility that geometric clustering reveals sub-basin structure beyond named classes.
+
+---
+
+# 7. Performance heatmap — linkage × dataset
+
+## Main numerical result
+
+### Isotropic
+- single = 1.000
+- complete = 1.000
+- average = 1.000
+- ward = 1.000
+
+### Anisotropic
+- single = 0.568
+- complete = 0.975
+- average = 0.956
+- ward = 0.961
+
+### Unequal
+- single = -0.004
+- complete = 0.484
+- average = 0.800
+- ward = 0.822
+
+### Circles
+- single = 1.000
+- complete = 0.175
+- average = 0.129
+- ward = 0.020
+
+### Moons
+- single = 1.000
+- complete = 0.483
+- average = 0.583
+- ward = 0.583
+
+## Interpretation: the heatmap is a geometry-to-linkage dictionary
+
+This heatmap is one of the most important summaries of the entire project.
+
+It shows that each linkage has a characteristic inductive bias.
+
+---
+
+## 7.1 Single linkage
+
+### Observed pattern
+
+Single linkage was:
+
+- perfect on isotropic blobs,
+- mediocre on anisotropic blobs,
+- catastrophic on unequal blobs,
+- perfect on circles,
+- perfect on moons.
+
+### Interpretation
+
+Single linkage is the linkage of **connectedness** and **local chaining**.
+
+That makes it excellent for non-convex manifolds such as circles and moons, because the true cluster identity is about being connected along a shape.
+
+However, that same property makes it fragile on:
+
+- unequal density,
+- bridge-like noise,
+- elongated chains between groups,
+- and datasets where one wants compact rather than connected clusters.
+
+### Main lesson
+
+Single linkage is powerful but specialized.
+
+It should be chosen when connected geometry is the target notion of a cluster, not when compactness is the goal.
+
+---
+
+## 7.2 Complete linkage
+
+### Observed pattern
+
+Complete linkage was:
+
+- perfect on isotropic blobs,
+- excellent on anisotropic blobs,
+- only moderate on unequal blobs,
+- poor on circles,
+- mediocre on moons.
+
+### Interpretation
+
+Complete linkage strongly resists chaining because it judges cluster distance by the farthest cross-cluster pair.
+
+This makes it good at preserving compact, tight, separated groups.
+
+That is why it performed strongly on isotropic and anisotropic data.
+
+However, because it dislikes elongated or curved clusters, it performed poorly on circles and moderately on moons.
+
+### Main lesson
+
+Complete linkage is useful when one wants compact clusters and wants to suppress chaining, but it is not suitable for strongly non-convex manifold structure.
+
+---
+
+## 7.3 Average linkage
+
+### Observed pattern
+
+Average linkage was:
+
+- perfect on isotropic blobs,
+- excellent on anisotropic blobs,
+- strong on unequal blobs,
+- poor on circles,
+- intermediate on moons.
+
+### Interpretation
+
+Average linkage behaved like the most balanced method across datasets.
+
+It was rarely the absolute best, but often robust.
+
+It combines some resistance to chaining with less severity than complete linkage.
+
+That is why it performed well on anisotropic and unequal data, but still could not fully handle non-convex manifold datasets like circles and moons.
+
+### Main lesson
+
+Average linkage is a strong compromise method when dataset geometry is not obviously manifold-shaped and one wants a robust middle ground.
+
+---
+
+## 7.4 Ward linkage
+
+### Observed pattern
+
+Ward linkage was:
+
+- perfect on isotropic blobs,
+- excellent on anisotropic blobs,
+- best on unequal among the four methods in this experiment,
+- terrible on circles,
+- only moderate on moons.
+
+### Interpretation
+
+Ward is the linkage of **variance minimization**.
+
+It is most natural for blob-like compact cluster structure.
+
+It is especially strong when meaningful groups can be characterized as low-variance cohesive regions in feature space.
+
+That is why it worked so well on isotropic, anisotropic, and unequal blob-like datasets.
+
+But because it strongly prefers compact groups, it is fundamentally mismatched to circles and moons.
+
+### Main lesson
+
+Ward is an excellent default for compact Euclidean clusters, but it should not be used when the true cluster identity is non-convex connected structure.
+
+---
+
+# 8. Cross-dataset synthesis
+
+## What the project as a whole demonstrated
+
+The project showed three broad regimes of clustering geometry.
+
+### Regime 1: easy compact blob structure
+Examples:
+- isotropic blobs
+
+Observations:
+- all methods succeed,
+- K-selection is easy,
+- silhouette and ARI agree,
+- dendrograms are highly faithful.
+
+### Regime 2: elongated / unequal but still blob-like structure
+Examples:
+- anisotropic blobs,
+- unequal blobs
+
+Observations:
+- single linkage becomes unreliable,
+- complete/average/Ward are much better,
+- Ward and average often perform best,
+- geometry is still cluster-like but more challenging.
+
+### Regime 3: non-convex manifold structure
+Examples:
+- circles,
+- moons
+
+Observations:
+- single linkage is uniquely appropriate,
+- complete/average/Ward fail because they prefer compact convex groups,
+- silhouette becomes questionable if it conflicts with manifold truth.
+
+### Regime 4: realistic hierarchical physical state structure
+Examples:
+- polymer conformation hierarchy
+
+Observations:
+- no single flat partition is perfectly correct,
+- hierarchy matters more than one chosen K,
+- moderate ARI does not imply useless clustering,
+- silhouette may favor sub-basin splitting,
+- interpretation must be domain-aware.
+
+---
+
+# 9. Practical lessons for future use
+
+## If I have a new dataset, what should I remember?
+
+### Use Ward when:
+- clusters are expected to be compact,
+- Euclidean variance is meaningful,
+- I want a strong default for blob-like structure,
+- I care about clean low-variance groups.
+
+### Use single when:
+- clusters are non-convex,
+- cluster identity is about connected shape,
+- I want to follow manifolds such as arcs, rings, or chains,
+- I understand that chaining is a feature, not a bug.
+
+### Use complete when:
+- I want compactness and strong resistance to chaining,
+- but do not want as much variance-based bias as Ward.
+
+### Use average when:
+- I want a robust compromise,
+- dataset geometry is mixed or uncertain,
+- and I need a linkage less extreme than single or complete.
+
+---
+
+# 10. Metric-specific caution notes
+
+## ARI
+
+Use ARI when true labels exist.
+
+It tells me how well my clustering matches known labels, but not whether those labels are the only meaningful structure in the data.
+
+## Silhouette
+
+Silhouette is powerful but only if its assumptions roughly match the data.
+
+It works best for:
+- compact,
+- convex,
+- well-separated clusters.
+
+It can be misleading for:
+- moons,
+- circles,
+- hierarchical sub-basin data,
+- overlapping physical states.
+
+## Cophenetic correlation
+
+Cophenetic correlation tells me how well a dendrogram preserves pairwise distance geometry.
+
+High cophenetic correlation means the tree is a good geometric summary.
+It does **not** necessarily mean the labels are correct.
+
+## Dendrogram cuts
+
+Dendrograms should be interpreted visually and physically, not only through automated heuristics.
+
+The current distance-acceleration heuristic in this project should not be trusted without fixing the implementation.
+
+---
+
+# 11. Main conceptual takeaways I should remember years later
+
+If I forget everything else and only remember a few principles, they should be these:
+
+1. **Hierarchical clustering is not one algorithm but a family of algorithms defined by the linkage rule.**
+2. **Different linkage rules encode different definitions of what it means for clusters to be close.**
+3. **Ward is best thought of as a variance-minimizing blob detector.**
+4. **Single linkage is best thought of as a connectivity/manifold detector.**
+5. **Silhouette is not universally reliable; it depends on cluster geometry.**
+6. **Dendrograms are valuable not only for choosing K but for understanding hierarchy.**
+7. **On realistic scientific data, moderate ARI can still coexist with meaningful hierarchical insight.**
+8. **The right method depends on the geometry of the true structure, not on generic popularity.**
+
+---
+
+# 12. Final project-level conclusion
+
+This project successfully demonstrated hierarchical clustering from multiple complementary angles:
+
+- implementation from scratch,
+- production-library usage,
+- side-by-side linkage comparison,
+- dendrogram interpretation,
+- K selection,
+- physically motivated hierarchy analysis,
+- and cross-dataset benchmarking.
+
+The strongest final insight is this:
+
+> **Hierarchical clustering is most useful when treated as a geometry-sensitive, interpretation-heavy tool rather than a one-click clustering black box.**
+
+The linkage rule is not a small parameter. It is the core modeling choice.
+
+Choosing linkage is effectively choosing the definition of cluster proximity:
+
+- nearest-point proximity,
+- farthest-point proximity,
+- average proximity,
+- or variance-increase proximity.
+
+Everything that happened in the project followed from that fact.
+
